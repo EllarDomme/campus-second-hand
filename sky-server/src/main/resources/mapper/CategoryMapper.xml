@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.CategoryMapper">
+    <update id="update" parameterType="com.sky.entity.Category">
+        update category
+--         修改时间，修改人id也要更新
+        <set>
+            <if test="type != null">type = #{type},</if>
+            <if test="name != null and name != ''">name = #{name},</if>
+            <if test="sort != null">sort = #{sort},</if>
+            <if test="updateTime != null">update_Time = #{updateTime},</if>
+            <if test="updateUser != null">update_User = #{updateUser},</if>
+        where id = #{id}
+    </update>
+
+
+    <select id="selectList" resultType="com.sky.entity.Category">
+        select * from category
+        <where>
+            <if test="type != null">type = #{type},</if>
+            <if test="name != null and name != ''">name like concat('%', #{name}, '%'),</if>
+        </where>
+        order by create_time desc
+    </select>
+</mapper>
