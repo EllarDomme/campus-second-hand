@@ -36,9 +36,9 @@ public interface CategoryMapper {
 
     /**
      * 根据类型查询分类
-     * @param category
+     * @param type
      * @return
      */
     @Select("select * from category where type = #{type}")
-    Category selectByType(Category category);
+    Category selectByType(Integer type);
 }

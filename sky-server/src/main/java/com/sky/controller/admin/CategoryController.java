@@ -6,6 +6,7 @@ import com.sky.entity.Category;
 import com.sky.result.PageResult;
 import com.sky.result.Result;
 import com.sky.service.CategoryService;
+import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,7 @@ public class CategoryController {
      * @return
      */
     @PostMapping()
+    @ApiOperation("添加分类")
     public Result addCategory(@RequestBody CategoryDTO categoryDTO) {
         log.info("添加分类：{}",categoryDTO);
         categoryService.insert(categoryDTO);
@@ -38,6 +40,7 @@ public class CategoryController {
      * @return
      */
     @GetMapping("/page")
+    @ApiOperation("分页查询分类")
     public Result pageQuery(CategoryPageQueryDTO categoryPageQueryDTO) {
         log.info("分页查询分类：{}",categoryPageQueryDTO);
         PageResult pageResult = categoryService.pageQuery(categoryPageQueryDTO);
@@ -46,13 +49,14 @@ public class CategoryController {
 
     /**
      * 删除分类
-     * @param categoryDTO
+     * @param id
      * @return
      */
     @DeleteMapping()
-    public Result deleteCategory(@RequestBody CategoryDTO categoryDTO) {
-        log.info("删除分类：{}",categoryDTO);
-        categoryService.delete(categoryDTO.getId());
+    @ApiOperation("删除分类")
+    public Result deleteCategory(@RequestParam Long id) {
+        log.info("删除分类id：{}",id);
+        categoryService.delete(id);
         return Result.success();
     }
 
@@ -62,6 +66,7 @@ public class CategoryController {
      * @return
      */
     @PutMapping()
+    @ApiOperation("更新分类")
     public Result updateCategory(@RequestBody CategoryDTO categoryDTO) {
         log.info("更新分类：{}",categoryDTO);
         categoryService.update(categoryDTO);
@@ -71,13 +76,14 @@ public class CategoryController {
     /**
      * 更新分类状态
      * @param status
-     * @param categoryDTO
+     * @param id
      * @return
      */
     @PostMapping("/status/{status}")
-    public Result updateStatus(@PathVariable Integer status, @RequestBody CategoryDTO categoryDTO) {
-        log.info("更新分类状态：{}",status);
-        categoryService.updateStatus(status, categoryDTO.getId());
+    @ApiOperation("更新分类状态")
+    public Result updateStatus(@PathVariable Integer status, @RequestParam Long id) {
+        log.info("更新分类状态：{},分类id：{}",status,id);
+        categoryService.updateStatus(status, id);
         return Result.success();
     }
 
@@ -87,10 +93,10 @@ public class CategoryController {
      * @return
      */
     @GetMapping("/list")
+    @ApiOperation("根据类型查询分类")
     public Result getCategoryList(CategoryDTO categoryDTO) {
         log.info("根据类型查询分类：{}",categoryDTO);
-        Category category = new Category();
-        category = categoryService.listByType(categoryDTO);
-        return Result.success(category);
+        List<Category> categoryList = categoryService.listByType(categoryDTO);
+        return Result.success(categoryList);
     }
 }

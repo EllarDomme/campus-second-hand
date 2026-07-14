@@ -88,6 +88,7 @@ public class CategoryServiceImpl implements CategoryService {
         //更新修改时间，修改人id，以及分类状态
         category.setUpdateTime(LocalDateTime.now());
         category.setUpdateUser(BaseContext.getCurrentId());
+        category.setId(id);
         category.setStatus(status);
         categoryMapper.update(category);
     }
@@ -96,11 +97,12 @@ public class CategoryServiceImpl implements CategoryService {
      * 根据类型查询分类
      */
     @Override
-    public Category listByType(CategoryDTO categoryDTO) {
-        Category category = new Category();
-        BeanUtils.copyProperties(categoryDTO,category);
+    public List<Category> listByType(CategoryDTO categoryDTO) {
         //根据类型查询分类
-        category = categoryMapper.selectByType(category);
-        return category;
+        Integer typer = categoryDTO.getType();
+
+        List<Category> categoryList = (List<Category>) categoryMapper.selectByType(typer);
+
+        return categoryList;
     }
 }
