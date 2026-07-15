@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.DishMapper">
+
+    <select id="selectList" resultType="com.sky.vo.DishVO">
+        select d.id id,d.name name,d.category_id categoryId,d.price price,d.image image,d.description description,d.update_time updateTime,d.status status,c.name categoryName
+        from dish d left join category c on d.category_id = c.id
+        <where>
+            <if test="categoryId != null">
+                d.category_id = #{categoryId}
+            </if>
+            <if test="name != null and name != ''">
+                d.name like concat('%', #{name}, '%')
+            </if>
+            <if test="status != null">
+                d.status = #{status}
+            </if>
+        </where>
+
+    </select>
+</mapper>
