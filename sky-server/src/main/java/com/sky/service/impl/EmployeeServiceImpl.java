@@ -80,6 +80,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         //设置密码默认值是123456
         employee.setPassword("123456");
 
+        /**
         //设置当前记录的创建时间和修改时间
         employee.setCreateTime(LocalDateTime.now());
         employee.setUpdateTime(LocalDateTime.now());
@@ -87,6 +88,7 @@ public class EmployeeServiceImpl implements EmployeeService {
         //设置当前创建人和修改人的id
         employee.setCreateUser(BaseContext.getCurrentId());
         employee.setUpdateUser(BaseContext.getCurrentId());
+         **/
 
 
         //调用Mapper方法，将数据插入到数据库中
