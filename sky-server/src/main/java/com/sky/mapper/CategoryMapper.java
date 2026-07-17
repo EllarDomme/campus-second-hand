@@ -10,6 +10,8 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
+import java.util.List;
+
 @Mapper
 public interface CategoryMapper {
     /**
@@ -48,5 +50,5 @@ public interface CategoryMapper {
      * @return
      */
     @Select("select * from category where type = #{type}")
-    Category selectByType(Integer type);
+    List<Category> selectByType(Integer type);
 }

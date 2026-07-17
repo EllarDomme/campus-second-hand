@@ -8,4 +8,12 @@
                 (#{flavor.dishId},#{flavor.name},#{flavor.value})
             </foreach>
     </insert>
+    <update id="updateById">
+        update dish_flavor
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="value != null">value = #{value},</if>
+        </set>
+        where id = #{id}
+    </update>
 </mapper>
