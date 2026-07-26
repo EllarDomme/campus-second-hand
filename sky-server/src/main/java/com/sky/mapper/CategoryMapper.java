@@ -45,10 +45,10 @@ public interface CategoryMapper {
     void update(Category category);
 
     /**
-     * 根据类型查询分类
+     * 根据类型查询分类，type为null则查询所有
      * @param type
      * @return
      */
-    @Select("select * from category where type = #{type}")
+    @Select("select * from category where type = #{type} or #{type} is null order by sort")
     List<Category> selectByType(Integer type);
 }
