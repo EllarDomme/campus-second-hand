@@ -70,9 +70,9 @@ public class SetmealServiceImpl implements SetmealService {
 
     @Transactional
     @Override
-    public void delete(List<Integer> ids) {
+    public void delete(List<Long> ids) {
         //判断是否在起售中
-        for(Integer id : ids){
+        for(Long id : ids){
             Setmeal setmeal = setmealMapper.selectById(id);
             if(setmeal.getStatus() == StatusConstant.ENABLE){
                 throw new DeletionNotAllowedException(MessageConstant.SETMEAL_ON_SALE);
@@ -80,12 +80,12 @@ public class SetmealServiceImpl implements SetmealService {
         }
 
         //判断是否存在套餐的菜品并删除
-        for(Integer id : ids){
+        for(Long id : ids){
             setmealDishMapper.deleteBySetmealId(id);
         }
 
         //删除套餐
-        for(Integer id : ids){
+        for(Long id : ids){
             setmealMapper.deleteById(id);
         }
 
@@ -101,7 +101,7 @@ public class SetmealServiceImpl implements SetmealService {
         setmealMapper.updateById(setmeal);
 
         //先删除原有关联菜品
-        setmealDishMapper.deleteBySetmealId(Math.toIntExact(setmealDTO.getId()));
+        setmealDishMapper.deleteBySetmealId((long) Math.toIntExact(setmealDTO.getId()));
 
         //再重新插入新菜品
         List<SetmealDish> setmealDishes = setmealDTO.getSetmealDishes();

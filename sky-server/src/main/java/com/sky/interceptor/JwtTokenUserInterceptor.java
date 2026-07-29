@@ -23,7 +23,7 @@ public class JwtTokenUserInterceptor implements HandlerInterceptor {
 
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         //判断当前拦截到的是Controller方法还是其他类型的方法
-        if (handler instanceof HandlerMethod) {
+        if (!(handler instanceof HandlerMethod)) {
             return true;
         }
 

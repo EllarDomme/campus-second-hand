@@ -25,10 +25,10 @@ public interface SetmealMapper {
     Page<SetmealPageVO> selectPage(SetmealPageVO setmealPageVO);
 
     @Select("select * from setmeal where id = #{id}")
-    Setmeal selectById(Integer id);
+    Setmeal selectById(Long id);
 
     @Delete("delete from setmeal where id = #{id}")
-    void deleteById(Integer id);
+    void deleteById(Long id);
 
     @AutoFill(value = OperationType.UPDATE)
     void updateById(Setmeal setmeal);

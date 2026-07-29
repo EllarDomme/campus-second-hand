@@ -19,7 +19,7 @@ public interface SetmealDishMapper {
     void insert(SetmealDish item);
 
     @Delete("delete from setmeal_dish where setmeal_id = #{id}")
-    void deleteBySetmealId(Integer id);
+    void deleteBySetmealId(Long id);
 
     @Select("select * from setmeal_dish where setmeal_id = #{setmealId}")
     List<SetmealDish> selectBySetmealId(Long setmealId);
