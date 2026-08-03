@@ -1,8 +1,14 @@
 package com.sky.mapper;
 
+import com.github.pagehelper.Page;
+import com.sky.dto.OrdersPageQueryDTO;
 import com.sky.entity.Orders;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+import java.time.LocalDateTime;
 
 @Mapper
 public interface OrderMapper {
@@ -24,8 +30,30 @@ public interface OrderMapper {
     Orders getByNumber(String orderNumber);
 
     /**
-     * 修改订单信息
+     * 修改订单信息s
      * @param orders
      */
     void update(Orders orders);
+
+    Page<Orders> selectList(OrdersPageQueryDTO ordersPageQueryDTO);
+
+    @Select("select * from orders where id = #{id}")
+    Orders selectById(Long id);
+
+    @Select("select count(*) from orders where status = #{status}")
+    Long selectCountByStatus(Integer status);
+
+    /**
+     * 批量取消超时未支付的订单
+     *
+     * @param cancelReason 取消原因
+     * @param cancelTime   取消时间
+     * @param deadline     下单时间早于该时刻的待付款订单视为超时
+     * @return 取消的订单数
+     */
+    @Update("update orders set status = 6, cancel_reason = #{cancelReason}, cancel_time = #{cancelTime} " +
+            "where status = 1 and order_time < #{deadline}")
+    Integer cancelExpiredOrders(@Param("cancelReason") String cancelReason,
+                                @Param("cancelTime") LocalDateTime cancelTime,
+                                @Param("deadline") LocalDateTime deadline);
 }
