@@ -6,6 +6,10 @@ spring:
     active: dev
   main:
     allow-circular-references: true
+  task:
+    scheduling:
+      pool:
+        size: 5
   datasource:
     druid:
       driver-class-name: ${sky.datasource.driver-class-name}

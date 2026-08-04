@@ -9,6 +9,8 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface OrderMapper {
@@ -56,4 +58,9 @@ public interface OrderMapper {
     Integer cancelExpiredOrders(@Param("cancelReason") String cancelReason,
                                 @Param("cancelTime") LocalDateTime cancelTime,
                                 @Param("deadline") LocalDateTime deadline);
+
+    @Select("select * from orders where status = #{status} and order_time < #{orderTime}")
+    List<Orders> getByStatusAndOrderTimeLT(Integer status, LocalDateTime orderTime);
+
+    Double sumByMap(Map map);
 }

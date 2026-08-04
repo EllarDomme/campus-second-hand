@@ -17,6 +17,7 @@ import com.sky.service.OrderService;
 import com.sky.utils.BaiduMapUtil;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.*;
+import com.sky.websocket.WebSocketServer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,9 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -47,6 +46,8 @@ public class OrderServiceImpl implements OrderService {
     private BaiduMapUtil baiduMapUtil;
     @Autowired
     private ShopProperties shopProperties;
+    @Autowired
+    private WebSocketServer webSocketServer;
 
     /**
      * 订单提交
@@ -160,6 +161,9 @@ public class OrderServiceImpl implements OrderService {
                     .checkoutTime(LocalDateTime.now())
                     .build();
             orderMapper.update(orders);
+
+            // 来单提醒：Mock模式没有微信回调，这里手动推送
+            sendNewOrderReminder(ordersDB);
         }
 
         OrderPaymentVO vo = OrderPaymentVO.builder()
@@ -182,6 +186,9 @@ public class OrderServiceImpl implements OrderService {
     public void paySuccess(String outTradeNo) {
         // 根据订单号查询订单（支付回调无JWT上下文，不能用userId查询）
         Orders ordersDB = orderMapper.getByNumber(outTradeNo);
+        if (ordersDB == null) {
+            throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
+        }
 
         // 根据订单id更新订单的状态、支付方式、支付状态、结账时间
         Orders orders = Orders.builder()
@@ -192,6 +199,23 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         orderMapper.update(orders);
+
+        // 来单提醒：通过WebSocket向店铺端推送新订单消息
+        sendNewOrderReminder(ordersDB);
+
+    }
+
+    /**
+     * 来单提醒：通过WebSocket向店铺端推送新订单消息
+     *
+     * @param order 已支付的新订单
+     */
+    private void sendNewOrderReminder(Orders order) {
+        Map map = new HashMap();
+        map.put("type", 1);
+        map.put("orderId", order.getId());
+        map.put("content", "订单号：" + order.getNumber());
+        webSocketServer.sendToAllClient(JSONObject.toJSONString(map));
     }
 
     /**
@@ -498,6 +522,23 @@ public class OrderServiceImpl implements OrderService {
         if (count != null && count > 0) {
             log.info("定时任务：自动取消 {} 笔超时未支付订单", count);
         }
+    }
+
+    @Override
+    public void reminder(Long id) {
+        //查询订单是否存在
+        Orders order = orderMapper.selectById(id);
+
+        if(order == null){
+            throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
+        }
+
+        //利用webSocket实现用户催单
+        Map map = new HashMap();
+        map.put("type",2);
+        map.put("orderId",id);
+        map.put("content","订单号:" + order.getNumber());
+        webSocketServer.sendToAllClient(JSONObject.toJSONString(map));
     }
 
 }
