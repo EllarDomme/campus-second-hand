@@ -31,7 +31,6 @@ public class CategoryServiceImpl implements CategoryService {
         Category category = new Category();
         BeanUtils.copyProperties(categoryDTO,category);
         //设置对象成员的各个默认值，分类状态为0，创建时间，更新时间，创建人id，以及修改人id
-        category.setStatus(0);
         /**
         category.setCreateTime(LocalDateTime.now());
         category.setUpdateTime(LocalDateTime.now());
@@ -85,45 +84,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     /**
-     * 更新分类状态
-     */
-    @Override
-    public void updateStatus(Integer status, Long id) {
-        Category category = new Category();
-        //更新修改时间，修改人id，以及分类状态
-
-        /**
-        category.setUpdateTime(LocalDateTime.now());
-        category.setUpdateUser(BaseContext.getCurrentId());
-         **/
-
-        category.setId(id);
-        category.setStatus(status);
-
-
-        categoryMapper.update(category);
-    }
-
-    /**
-     * 根据类型查询分类
-     */
-    @Override
-    public List<Category> listByType(CategoryDTO categoryDTO) {
-        //根据类型查询分类
-        Integer typer = categoryDTO.getType();
-
-        List<Category> categoryList = (List<Category>) categoryMapper.selectByType(typer);
-
-        return categoryList;
-    }
-
-    /**
-     * 根据类型查询分类
-     * @param type
+     * 查询分类
+     * @param
      * @return
      */
-    public List<Category> list(Integer type) {
-        List<Category> categoryList = (List<Category>) categoryMapper.selectByType(type);
+    public List<Category> list() {
+        List<Category> categoryList = categoryMapper.selectAll();
         return categoryList;
     }
 }

@@ -44,7 +44,8 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
 
         //2、校验令牌
         try {
-            log.info("jwt校验:{}", token);
+            //不打印完整令牌：日志会落盘，明文 token 等同于凭据泄露
+            log.info("开始校验管理员令牌，长度：{}", token == null ? 0 : token.length());
             Claims claims = JwtUtil.parseJWT(jwtProperties.getAdminSecretKey(), token);
             Long empId = Long.valueOf(claims.get(JwtClaimsConstant.EMP_ID).toString());
             log.info("当前员工id：{}", empId);
@@ -57,5 +58,11 @@ public class JwtTokenAdminInterceptor implements HandlerInterceptor {
             response.setStatus(401);
             return false;
         }
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        //请求结束必须清理 ThreadLocal：Tomcat 线程复用，不清理会造成身份残留甚至跨请求串号
+        BaseContext.removeCurrentId();
     }
 }

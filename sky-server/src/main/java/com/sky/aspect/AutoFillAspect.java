@@ -56,42 +56,43 @@ public class AutoFillAspect {
 
         //通过不同的操作类型，为对应的属性通过反射来进行赋值
         if(operationType == OperationType.INSERT){
-            //为四个公共字段赋值
-            try{
-                //为四个公共字段赋值
-                Method setCreateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_TIME, LocalDateTime.class);
-
-                Method setUpdateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME, LocalDateTime.class);
-
-                Method setCreateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_USER, Long.class);
-
-                Method setUpdateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER, Long.class);
-
-                //通过反射为对象属性赋值
-                setCreateTime.invoke(entity,now);
-                setCreateUser.invoke(entity,currentId);
-                setUpdateTime.invoke(entity,now);
-                setUpdateUser.invoke(entity,currentId);
-
-            }catch(Exception e){
-                e.printStackTrace();
-            }
+            //为四个公共字段赋值（实体上没有该字段时自动跳过）
+            fillIfPresent(entity, AutoFillConstant.SET_CREATE_TIME, LocalDateTime.class, now);
+            fillIfPresent(entity, AutoFillConstant.SET_UPDATE_TIME, LocalDateTime.class, now);
+            fillIfPresent(entity, AutoFillConstant.SET_CREATE_USER, Long.class, currentId);
+            fillIfPresent(entity, AutoFillConstant.SET_UPDATE_USER, Long.class, currentId);
         }else if(operationType == OperationType.UPDATE){
-            //为两个公共字段赋值
-            try{
-                //为两个公共字段赋值
-                Method setUpdateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME, LocalDateTime.class);
-
-                Method setUpdateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER, Long.class);
-
-                //通过反射为对象属性赋值
-                setUpdateTime.invoke(entity,now);
-                setUpdateUser.invoke(entity,currentId);
-            }catch(Exception e){
-                e.printStackTrace();
-            }
+            //为两个公共字段赋值（实体上没有该字段时自动跳过）
+            fillIfPresent(entity, AutoFillConstant.SET_UPDATE_TIME, LocalDateTime.class, now);
+            fillIfPresent(entity, AutoFillConstant.SET_UPDATE_USER, Long.class, currentId);
         }
 
+    }
+
+    /**
+     * 实体上存在该 setter 才赋值，不存在就跳过。
+     *
+     * 为什么必须容错：不同实体的"公共字段"并不完全一致。
+     * 例如按新表设计，category 只有 create_time / update_time，
+     * 没有 create_user / update_user。
+     *
+     * 早期实现是把 4 个 setter 先全部查出来再统一赋值，只要有一个方法不存在就抛
+     * NoSuchMethodException，被 catch 吞掉后连 create_time 都没填上，
+     * 最终 insert 报 "Column 'create_time' cannot be null"。
+     * 改成逐个判断后，缺字段的实体也能正常填充其余公共字段。
+     */
+    private void fillIfPresent(Object entity, String setterName, Class<?> paramType, Object value){
+        try{
+            //用 getMethod（会查找继承来的 public 方法）而不是 getDeclaredMethod
+            Method setter = entity.getClass().getMethod(setterName, paramType);
+            setter.invoke(entity, value);
+        }catch(NoSuchMethodException e){
+            //该实体没有这个公共字段，属于正常情况，跳过即可
+            log.debug("实体 {} 没有 {}，跳过该公共字段",
+                    entity.getClass().getSimpleName(), setterName);
+        }catch(Exception e){
+            log.error("公共字段自动填充失败，方法：{}", setterName, e);
+        }
     }
 
 }

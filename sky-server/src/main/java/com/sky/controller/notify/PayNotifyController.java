@@ -1,130 +1,58 @@
 package com.sky.controller.notify;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
-import com.sky.properties.WeChatProperties;
 import com.sky.result.Result;
-import com.sky.service.OrderService;
-import com.wechat.pay.contrib.apache.httpclient.util.AesUtil;
+import com.sky.service.TradeOrderService;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.http.entity.ContentType;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.BufferedReader;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 
 /**
- * 支付回调相关接口
+ * 支付结果通知（模拟通道）
+ *
+ * 真实场景：微信支付平台主动 POST 到商户配置的 notifyUrl，请求体是加密的，
+ *          需要「验签 + 解密 + 应答」，而且**同一条通知可能重复送达**。
+ * 模拟场景：由前端（或测试脚本）直接调用本接口，带上 payNo 即可。
+ *
+ * 为什么保留这个类：幂等、状态流转、对账这些核心逻辑与真实通道完全一致。
+ * 将来接真实通道，只需在最外层补上验签与解密，核心逻辑一行都不用改。
  */
 @RestController
 @RequestMapping("/notify")
+@Api(tags = "支付回调（模拟通道）")
 @Slf4j
 public class PayNotifyController {
+
     @Autowired
-    private OrderService orderService;
-    @Autowired
-    private WeChatProperties weChatProperties;
+    private TradeOrderService tradeOrderService;
 
     /**
-     * 支付成功回调
-     *
-     * @param request
+     * 调试接口开关：支付回调能直接改订单状态，生产环境必须关闭。
+     * 由 application-dev.yml 的 sky.debug.enabled 控制。
      */
-    @RequestMapping("/paySuccess")
-    public void paySuccessNotify(HttpServletRequest request, HttpServletResponse response) throws Exception {
-        //读取数据
-        String body = readData(request);
-        log.info("支付成功回调：{}", body);
-
-        //数据解密
-        String plainText = decryptData(body);
-        log.info("解密后的文本：{}", plainText);
-
-        JSONObject jsonObject = JSON.parseObject(plainText);
-        String outTradeNo = jsonObject.getString("out_trade_no");//商户平台订单号
-        String transactionId = jsonObject.getString("transaction_id");//微信支付交易号
-
-        log.info("商户平台订单号：{}", outTradeNo);
-        log.info("微信支付交易号：{}", transactionId);
-
-        //业务处理，修改订单状态、来单提醒
-        orderService.paySuccess(outTradeNo);
-
-        //给微信响应
-        responseToWeixin(response);
-    }
+    @Value("${sky.debug.enabled:false}")
+    private boolean debugEnabled;
 
     /**
-     * 读取数据
+     * 模拟「支付成功」通知
      *
-     * @param request
-     * @return
-     * @throws Exception
+     * ⚠️ 幂等要求：同一个 payNo 调用 N 次，只能产生一次实际效果，并且**每次都返回成功**。
+     * 为什么必须返回成功：真实支付平台收到非成功应答会不断重试通知，
+     * 如果重复通知我们回"失败"，平台就会一直重发。
      */
-    private String readData(HttpServletRequest request) throws Exception {
-        BufferedReader reader = request.getReader();
-        StringBuilder result = new StringBuilder();
-        String line = null;
-        while ((line = reader.readLine()) != null) {
-            if (result.length() > 0) {
-                result.append("\n");
-            }
-            result.append(line);
+    @PostMapping("/paySuccess")
+    @ApiOperation("模拟支付成功通知（幂等：重复调用不会重复处理）")
+    public Result paySuccess(@RequestParam String payNo) {
+        if (!debugEnabled) {
+            return Result.error("调试接口未开启");
         }
-        return result.toString();
-    }
-
-    /**
-     * 数据解密
-     *
-     * @param body
-     * @return
-     * @throws Exception
-     */
-    private String decryptData(String body) throws Exception {
-        JSONObject resultObject = JSON.parseObject(body);
-        JSONObject resource = resultObject.getJSONObject("resource");
-        String ciphertext = resource.getString("ciphertext");
-        String nonce = resource.getString("nonce");
-        String associatedData = resource.getString("associated_data");
-
-        AesUtil aesUtil = new AesUtil(weChatProperties.getApiV3Key().getBytes(StandardCharsets.UTF_8));
-        //密文解密
-        String plainText = aesUtil.decryptToString(associatedData.getBytes(StandardCharsets.UTF_8),
-                nonce.getBytes(StandardCharsets.UTF_8),
-                ciphertext);
-
-        return plainText;
-    }
-
-    /**
-     * 给微信响应
-     * @param response
-     */
-    private void responseToWeixin(HttpServletResponse response) throws Exception{
-        response.setStatus(200);
-        HashMap<Object, Object> map = new HashMap<>();
-        map.put("code", "SUCCESS");
-        map.put("message", "SUCCESS");
-        response.setHeader("Content-type", ContentType.APPLICATION_JSON.toString());
-        response.getOutputStream().write(JSON.toJSONString(map).getBytes(StandardCharsets.UTF_8));
-        response.flushBuffer();
-    }
-
-    /**
-     * 【测试接口】手动触发支付成功回调，模拟微信通知
-     * 用法：GET /notify/testPaySuccess?orderNumber=xxx
-     */
-    @GetMapping("/testPaySuccess")
-    public Result<String> testPaySuccess(@RequestParam String orderNumber) {
-        log.info("【测试回调】手动触发支付成功，订单号：{}", orderNumber);
-        orderService.paySuccess(orderNumber);
-        return Result.success("支付成功回调已处理，订单 " + orderNumber + " 状态已更新");
+        log.info("收到模拟支付成功通知：payNo={}", payNo);
+        tradeOrderService.handlePaySuccess(payNo);
+        return Result.success();
     }
 }

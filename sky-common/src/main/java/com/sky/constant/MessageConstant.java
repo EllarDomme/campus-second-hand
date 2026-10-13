@@ -25,7 +25,13 @@ public class MessageConstant {
     public static final String ORDER_NOT_FOUND = "订单不存在";
     public static final String USER_CANCEL_ORDER = "用户取消订单";
     public static final String TIMEOUT_CANCEL_ORDER = "订单超时未支付，自动取消";
-    public static final String ALEARDY_EXIST = "已存在";
+    public static final String ALREADY_EXIST = "已存在";
     public static final String ADDRESS_OUT_OF_RANGE = "当前地址超出配送范围，请重新选择收货地址";
+
+    // ===== 商品（校园二手）相关 =====
+    public static final String PRODUCT_NOT_FOUND = "商品不存在";
+    public static final String PRODUCT_IN_TRADE = "商品正在交易中，无法删除";
+    public static final String PRODUCT_NOT_BELONG_TO_YOU = "只能操作自己发布的商品";
+    public static final String PRODUCT_AUDIT_STATUS_ERROR = "审核状态不合法";
 
 }

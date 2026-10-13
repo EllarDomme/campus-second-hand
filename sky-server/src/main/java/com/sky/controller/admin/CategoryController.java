@@ -74,29 +74,14 @@ public class CategoryController {
     }
 
     /**
-     * 更新分类状态
-     * @param status
-     * @param id
-     * @return
-     */
-    @PostMapping("/status/{status}")
-    @ApiOperation("更新分类状态")
-    public Result updateStatus(@PathVariable Integer status, @RequestParam Long id) {
-        log.info("更新分类状态：{},分类id：{}",status,id);
-        categoryService.updateStatus(status, id);
-        return Result.success();
-    }
-
-    /**
-     * 根据类型查询分类
-     * @param categoryDTO
+     * 查询分类
      * @return
      */
     @GetMapping("/list")
-    @ApiOperation("根据类型查询分类")
-    public Result getCategoryList(CategoryDTO categoryDTO) {
-        log.info("根据类型查询分类：{}",categoryDTO);
-        List<Category> categoryList = categoryService.listByType(categoryDTO);
+    @ApiOperation("查询分类")
+    public Result getCategoryList() {
+        log.info("查询分类");
+        List<Category> categoryList = categoryService.list();
         return Result.success(categoryList);
     }
 }

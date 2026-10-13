@@ -3,11 +3,9 @@ package com.sky.service.impl;
 import ch.qos.logback.core.joran.util.beans.BeanUtil;
 import com.sky.context.BaseContext;
 import com.sky.dto.ShoppingCartDTO;
-import com.sky.entity.Dish;
-import com.sky.entity.Setmeal;
+import com.sky.entity.Product;
 import com.sky.entity.ShoppingCart;
-import com.sky.mapper.DishMapper;
-import com.sky.mapper.SetmealMapper;
+import com.sky.mapper.ProductMapper;
 import com.sky.mapper.ShoppingCartMapper;
 import com.sky.service.ShoppingCartService;
 import org.springframework.beans.BeanUtils;
@@ -22,9 +20,7 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
     @Autowired
     private ShoppingCartMapper shoppingCartMapper;
     @Autowired
-    private DishMapper dishMapper;
-    @Autowired
-    private SetmealMapper setmealMapper;
+    private ProductMapper dishMapper;
 
     @Override
     public void addShoppingCart(ShoppingCartDTO shoppingCartDTO) {
@@ -51,16 +47,14 @@ public class ShoppingCartServiceImpl implements ShoppingCartService {
             System.out.println("一直都要加到购物车");
             System.out.println();
             Long dishId = shoppingCartDTO.getDishId();
-            if(dishId != null){
-                Dish dish = dishMapper.getById(dishId);
-                shoppingCart.setName(dish.getName());
-                shoppingCart.setImage(dish.getImage());
+            // 本模块（购物车）在改造计划里属于"批次C - 待删除"：二手商品每件唯一，不需要购物车。
+            // T3-3 已删除套餐模块，所以这里不再有"套餐分支"，只保留商品分支，
+            // 等阶段 3 重写订单时整个模块一并删除。
+            Product dish = dishId == null ? null : dishMapper.getById(dishId);
+            if (dish != null) {
+                shoppingCart.setName(dish.getTitle());
+                shoppingCart.setImage(dish.getImages());
                 shoppingCart.setAmount(dish.getPrice());
-            }else{
-                Setmeal setmeal = setmealMapper.selectById(shoppingCart.getSetmealId());
-                shoppingCart.setName(setmeal.getName());
-                shoppingCart.setImage(setmeal.getImage());
-                shoppingCart.setAmount(setmeal.getPrice());
             }
             shoppingCart.setNumber(1);
             shoppingCart.setCreateTime(LocalDateTime.now());

@@ -6,12 +6,8 @@
         update category
 --         修改时间，修改人id也要更新
         <set>
-            <if test="type != null">type = #{type},</if>
-            <if test="name != null and name != ''">name = #{name},</if>
-            <if test="sort != null">sort = #{sort},</if>
-            <if test="status != null">status = #{status},</if>
+            <if test="categoryName != null and categoryName != ''">category_name = #{categoryName},</if>
             <if test="updateTime != null">update_Time = #{updateTime},</if>
-            <if test="updateUser != null">update_User = #{updateUser}</if>
         </set>
         where id = #{id}
     </update>
@@ -20,8 +16,7 @@
     <select id="selectList" resultType="com.sky.entity.Category">
         select * from category
         <where>
-            <if test="type != null">type = #{type}</if>
-            <if test="name != null and name != ''">name like concat('%', #{name}, '%')</if>
+            <if test="categoryName != null and categoryName != ''">category_name like concat('%', #{categoryName}, '%')</if>
         </where>
         order by create_time desc
     </select>

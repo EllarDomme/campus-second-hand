@@ -16,14 +16,5 @@ public interface CategoryService {
 
     void update(CategoryDTO categoryDTO);
 
-    void updateStatus(Integer status, Long id);
-
-    List<Category> listByType(CategoryDTO categoryDTO);
-
-    /**
-     * 根据类型查询分类
-     * @param type
-     * @return
-     */
-    List<Category> list(Integer type);
+    List<Category> list();
 }

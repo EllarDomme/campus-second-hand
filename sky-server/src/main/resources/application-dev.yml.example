@@ -1,0 +1,43 @@
+# 本地开发配置模板
+# 用法：复制此文件为 application-dev.yml，填入自己的真实配置后再启动项目。
+# application-dev.yml 已加入 .gitignore，不会被提交到仓库。
+sky:
+  # 调试接口开关（testLogin / notify/testPaySuccess）
+  # 仅本地开发开启；生产环境必须为 false
+  debug:
+    enabled: true
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    host: localhost
+    port: 3306
+    database: sky_take_out
+    username: <你的数据库用户名>
+    password: <你的数据库密码>
+
+  shop:
+    address: 北京市海淀区上地十街10号
+    ak: <你的百度地图 AK>
+
+  alioss:
+    endpoint: <你的 OSS endpoint，例如 oss-cn-beijing.aliyuncs.com>
+    access-key-id: <你的 AccessKeyId>
+    access-key-secret: <你的 AccessKeySecret>
+    bucket-name: <你的 bucket 名称>
+
+  redis:
+    host: localhost
+    port: 6379
+    password: <你的 Redis 密码>
+    database: 1
+
+  wechat:
+    appid: <你的微信 appid>
+    secret: <你的微信 secret>
+    mchid: <你的商户号>
+    mchSerialNo: <你的商户证书序列号>
+    privateKeyFilePath: <你的 apiclient_key.pem 路径>
+    apiV3Key: <你的 APIv3 密钥>
+    weChatPayCertFilePath: <你的平台证书路径>
+    notifyUrl: https://www.weixin.qq.com/wxpay/pay.php
+    refundNotifyUrl: https://www.weixin.qq.com/wxpay/pay.php

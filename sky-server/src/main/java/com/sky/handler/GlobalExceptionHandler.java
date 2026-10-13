@@ -39,11 +39,21 @@ public class GlobalExceptionHandler {
             String[] split = message.split(" ");
             //获取重复的字段值
             String username = split[2];
-            String msg = username + MessageConstant.ALEARDY_EXIST;
+            String msg = username + MessageConstant.ALREADY_EXIST;
             return Result.error(msg);
         }else{
             return Result.error(MessageConstant.UNKNOWN_ERROR);
         }
+    }
+
+    /**
+     * 兜底处理：未被上面两类覆盖的异常，保证任何异常都返回统一的 Result 结构，
+     * 避免前端拿到 Spring Boot 默认的 /error 结构导致处理不一致
+     */
+    @ExceptionHandler
+    public Result exceptionHandler(Exception ex){
+        log.error("系统异常：", ex);
+        return Result.error(MessageConstant.UNKNOWN_ERROR);
     }
 
 }

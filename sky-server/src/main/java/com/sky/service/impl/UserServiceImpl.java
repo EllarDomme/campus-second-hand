@@ -12,6 +12,7 @@ import com.sky.properties.WeChatProperties;
 import com.sky.service.UserService;
 import com.sky.utils.HttpClientUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -30,6 +31,31 @@ public class UserServiceImpl implements UserService {
     @Autowired
     private WeChatProperties weChatProperties;
 
+    private User getOrCreateByOpenid(String openid){
+        //判断当前用户是否为新用户
+        User user = userMapper.selectByOpenid(openid);
+        if(user != null){
+            return user;
+        }
+
+        //如果是新用户，那么就会自动进行注册
+        User newUser = User.builder()
+                .openid(openid)
+                .creditScore(100)
+                .role(0)
+                .status(0)
+                .createTime(LocalDateTime.now())
+                .updateTime(LocalDateTime.now())
+                .build();
+        try{
+            userMapper.insert(newUser);
+            return newUser;
+        }catch(DuplicateKeyException e){
+            log.warn("openid={}并发注册冲突，回查已有用户",openid);
+            return userMapper.selectByOpenid(openid);
+        }
+    }
+
 
     /**
      * 微信登录
@@ -39,25 +65,20 @@ public class UserServiceImpl implements UserService {
     @Override
     public User login(UserLoginDTO userLoginDTO) {
         String openid = getOpenid(userLoginDTO.getCode());
-
-        //判断openid
         if(openid == null){
             throw new LoginFailedException(MessageConstant.LOGIN_FAILED);
         }
+        return getOrCreateByOpenid(openid);
+    }
 
-        //判断当前用户是否为新用户
-        User user = userMapper.selectByOpenid(openid);
-
-        //如果是新用户，那么就自动完成注册
-        if(user == null){
-            user = User.builder()
-                    .openid(openid)
-                    .createTime(LocalDateTime.now())
-                    .build();
-            userMapper.insert(user);
-        }
-
-        return user;
+    /**
+     * 测试登录：用固定openid查询用户，不存在则自动注册（跳过微信code2session）
+     * @param openid 固定测试openid
+     * @return 用户
+     */
+    @Override
+    public User loginByOpenid(String openid) {
+        return getOrCreateByOpenid(openid);
     }
 
     /**

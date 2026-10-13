@@ -4,3 +4,9 @@
 *.class
 *Test.java
 **/test/
+
+# 本地开发配置（含数据库/OSS/微信支付等敏感凭据），不纳入版本管理
+sky-server/src/main/resources/application-dev.yml
+
+# 本地启动脚本生成的运行时 classpath 缓存（run-dev.ps1 自动重建）
+.dsh-cp-server.txt

@@ -18,7 +18,7 @@ public interface CategoryMapper {
      * 添加分类
      * @param category
      */
-    @Insert("insert into category(type,name,sort,create_time,update_time,create_user,update_user,status) values(#{type},#{name},#{sort},#{createTime},#{updateTime},#{createUser},#{updateUser},#{status})")
+    @Insert("insert into category(category_name,create_time,update_time) values(#{categoryName},#{createTime},#{updateTime})")
     @AutoFill(value = OperationType.INSERT)
     void insert(Category category);
 
@@ -46,9 +46,9 @@ public interface CategoryMapper {
 
     /**
      * 根据类型查询分类，type为null则查询所有
-     * @param type
+     * @param
      * @return
      */
-    @Select("select * from category where type = #{type} or #{type} is null order by sort")
-    List<Category> selectByType(Integer type);
+    @Select("select * from category order by id")
+    List<Category> selectAll();
 }

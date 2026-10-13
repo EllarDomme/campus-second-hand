@@ -21,8 +21,9 @@ import com.sky.websocket.WebSocketServer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.annotation.Order;
-import org.springframework.scheduling.annotation.Scheduled;
+
+import org.springframework.data.redis.core.RedisTemplate;
+
 import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,8 @@ public class OrderServiceImpl implements OrderService {
     private ShopProperties shopProperties;
     @Autowired
     private WebSocketServer webSocketServer;
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     /**
      * 订单提交
@@ -58,8 +61,15 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderSubmitVO submit(OrdersSubmitDTO ordersSubmitDTO) {
         //异常情况的处理，比如地址为空，超出送货距离，购物车为空
+        //店铺打烊统一禁止下单（对小程序/AI客服/网页所有客户端生效）。状态存在 Redis，key 见 ShopController.KEY
+        Integer shopStatus = (Integer) redisTemplate.opsForValue().get("SHOP_STATUS");
+        if (shopStatus == null || shopStatus == 0) {
+            throw new OrderBusinessException("店铺已打烊，暂无法下单");
+        }
         AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
-        if(addressBook==null){
+        //校验地址归属：只查 id 不校验 user_id 会让人用他人地址下单（水平越权）
+        Long currentUserId = BaseContext.getCurrentId();
+        if(addressBook==null || !currentUserId.equals(addressBook.getUserId())){
             throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
         }
 
@@ -162,7 +172,7 @@ public class OrderServiceImpl implements OrderService {
                     .build();
             orderMapper.update(orders);
 
-            // 来单提醒：Mock模式没有微信回调，这里手动推送
+            // 来单提醒：Mock支付没有微信回调，这里手动推送，商家端才会响「待接单」语音
             sendNewOrderReminder(ordersDB);
         }
 
@@ -374,9 +384,7 @@ public class OrderServiceImpl implements OrderService {
         Long deliveryInProgress = orderMapper.selectCountByStatus(Orders.DELIVERY_IN_PROGRESS);
         Long toBeConfirmed = orderMapper.selectCountByStatus(Orders.TO_BE_CONFIRMED);
 
-        System.out.println("待接单数量：" + toBeConfirmed);
-        System.out.println("待派送数量：" + confirmed);
-        System.out.println("派送中数量：" + deliveryInProgress);
+        log.info("订单统计：待接单={}，待派送={}，派送中={}", toBeConfirmed, confirmed, deliveryInProgress);
 
         OrderStatisticsVO orderStatisticsVO = new OrderStatisticsVO();
         orderStatisticsVO.setConfirmed(confirmed.intValue());
@@ -509,27 +517,13 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.update(order);
     }
 
-    /**
-     * 定时取消超时未支付的订单（每分钟执行一次）
-     */
-    @Scheduled(cron = "0 * * * * ?")
-    public void handleTimeoutOrders() {
-        log.info("定时任务：扫描超时未支付订单");
-        Integer count = orderMapper.cancelExpiredOrders(
-                MessageConstant.TIMEOUT_CANCEL_ORDER,
-                LocalDateTime.now(),
-                LocalDateTime.now().minusMinutes(15));
-        if (count != null && count > 0) {
-            log.info("定时任务：自动取消 {} 笔超时未支付订单", count);
-        }
-    }
 
     @Override
     public void reminder(Long id) {
-        //查询订单是否存在
+        //查询订单是否存在（同时校验归属，避免对他人订单催单）
         Orders order = orderMapper.selectById(id);
 
-        if(order == null){
+        if(order == null || !order.getUserId().equals(BaseContext.getCurrentId())){
             throw new OrderBusinessException(MessageConstant.ORDER_NOT_FOUND);
         }
 
