@@ -82,10 +82,14 @@ public class ProductController {
         return Result.success();
     }
 
+    // ==========================================================================
+    // 【公共逻辑 · 清商品缓存】本类里被 2 处调用（审核 / 删除违规商品）
+    //   ⚠️ 跨文件耦合：这里的 pattern 必须和用户端 user/ProductController 的
+    //      CACHE_KEY_PREFIX 一致（都为 "product_list_"）。
+    //      两边改一个不改另一个 → 缓存清不掉 → "商品改了但列表没变"，且不报错。
+    // ==========================================================================
     /**
      * 清空商品浏览缓存
-     * 注意：这里的 pattern 必须和用户端 ProductController 里的 CACHE_KEY_PREFIX 保持一致，
-     * 两边改一个不改另一个，缓存就不会被清掉（表现为"改了商品但列表没变"）
      */
     private void cleanCache() {
         Set keys = redisTemplate.keys("product_list_*");

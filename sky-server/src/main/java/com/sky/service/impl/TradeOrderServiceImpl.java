@@ -12,15 +12,12 @@ import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.entity.PaymentRecord;
 import com.sky.entity.Product;
 import com.sky.entity.TradeOrder;
-import com.sky.entity.User;
 import com.sky.exception.BaseException;
 import com.sky.mapper.PaymentRecordMapper;
 import com.sky.mapper.ProductMapper;
 import com.sky.mapper.TradeOrderMapper;
-import com.sky.mapper.UserMapper;
 import com.sky.result.PageResult;
 import com.sky.service.TradeOrderService;
-import com.sky.task.OrderTask;
 import com.sky.vo.TradeOrderPayVO;
 import com.sky.vo.TradeOrderSubmitVO;
 import com.sky.vo.TradeOrderVO;
@@ -34,6 +31,43 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * 交易订单服务实现
+ *
+ * ==========================================================================
+ * ★★★ 公共逻辑速查（这些方法被多处复用，改一处会影响多处）★★★
+ * --------------------------------------------------------------------------
+ * 把本类里的关键字【公共逻辑】拿去搜索，就能定位到全部：
+ *
+ *   【公共逻辑 · 取消订单】      doCancelOrder(order, reason, cancelStatus)
+ *        被 3 处复用：卖家拒单 reject ／ 双方取消 cancel ／ 超时关单 timeoutClose
+ *        它内部会自己判断"已支付就退款"，所以三种场景的调用方式完全一样，
+ *        差别只有两个参数：原因文案、终态用 3（已取消）还是 4（超时取消）
+ *
+ *   【公共逻辑 · 查订单或抛异常】  getOrderOrThrow(orderId)
+ *        被 2 处复用：拒单 ／ 取消
+ *
+ *   【公共逻辑 · 原因校验】        checkReason(reason, action)
+ *        被 2 处复用：拒单（action="拒单"）／ 取消（action="取消"）
+ *
+ *   【公共逻辑 · 资金流水号】      generateFlowNo(prefix)
+ *        被 3 处复用：支付 "PAY" ／ 退款 "REF" ／ 放款 "SET"
+ *
+ *   【公共逻辑 · 订单号】          generateOrderNo()
+ *        被 2 处复用：普通下单 ／ 议价成交下单
+ *
+ *   【公共逻辑 · 创建订单】        createOrder(...)   ← S3-6b 抽出
+ *        被 2 处复用：普通下单 submit ／ 议价成交 accept
+ *        （"锁商品 + 建订单 + 算超时"这三件事只写一份）
+ *
+ * --------------------------------------------------------------------------
+ * 本类之外还有一个更重要的公共逻辑：
+ *   【公共逻辑 · 条件更新商品状态】 ProductMapper.updateStatusIfMatch(id, fromStatus, toStatus)
+ *        被 4 处复用：
+ *          下单 → 在售锁成交易中 ／ 拒单·取消·超时 → 交易中回退在售 ／ 确认收货 → 交易中标记已售罄
+ *        ⚠️ 调用它之后【必须】判断影响行数（返回 0 说明状态不对，该抛异常让事务回滚）
+ * ==========================================================================
+ */
 @Service
 @Slf4j
 public class TradeOrderServiceImpl implements TradeOrderService {
@@ -46,10 +80,6 @@ public class TradeOrderServiceImpl implements TradeOrderService {
 
     @Autowired
     private PaymentRecordMapper paymentRecordMapper;
-    @Autowired
-    private UserMapper userMapper;
-    @Autowired
-    private OrderTask orderTask;
 
     /**
      * 买家下单
@@ -256,6 +286,9 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         log.info("支付成功已处理：payNo={}, orderNo={}", payNo, order.getOrderNo());
     }
 
+    // ==========================================================================
+    // 【公共逻辑 · 资金流水号】被 3 处复用：支付 "PAY" ／ 退款 "REF" ／ 放款 "SET"
+    // ==========================================================================
     /**
      * 生成资金流水号：前缀 + 年月日时分秒 + 4 位随机数
      *
@@ -271,6 +304,9 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         return prefix + time + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
     }
 
+    // ==========================================================================
+    // 【公共逻辑 · 订单号】被 2 处复用：普通下单 ／ 议价成交下单
+    // ==========================================================================
     /**
      * 生成业务订单号：年月日时分秒 + 4 位随机数
      *
@@ -369,8 +405,11 @@ public class TradeOrderServiceImpl implements TradeOrderService {
 
     // ==================== 订单取消：公共逻辑 + 两个入口 ====================
 
+    // ==========================================================================
+    // 【公共逻辑 · 查订单或抛异常】被 2 处复用：卖家拒单 reject ／ 双方取消 cancel
+    // ==========================================================================
     /**
-     * 查订单，查不到直接抛异常（拒单/取消都要用）
+     * 查订单，查不到直接抛异常
      */
     private TradeOrder getOrderOrThrow(Long orderId) {
         TradeOrder order = tradeOrderMapper.getById(orderId);
@@ -380,10 +419,14 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         return order;
     }
 
+    // ==========================================================================
+    // 【公共逻辑 · 原因校验】被 2 处复用：拒单（action="拒单"）／ 取消（action="取消"）
+    // ==========================================================================
     /**
-     * 原因校验（拒单/取消都要用）
+     * 原因校验
      *
-     * @param action 动作名，用来拼提示语（"拒单" / "取消"），这样两个入口都能给出准确的提示
+     * @param action 动作名，用来拼提示语，这样两个入口都能给出准确的提示
+     *               （"拒单原因不能为空" / "取消原因不能为空"）
      */
     private void checkReason(String reason, String action) {
         // trim 后判断，"   " 这种全空格也算空
@@ -392,6 +435,11 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         }
     }
 
+    // ==========================================================================
+    // 【公共逻辑 · 取消订单】被 3 处复用：
+    //     卖家拒单 reject ／ 双方取消 cancel ／ 超时关单 timeoutClose
+    //   三种场景的调用方式完全一样，差别只有：原因文案 + 终态(3已取消/4超时取消)
+    // ==========================================================================
     /**
      * 【取消订单的公共逻辑】卖家拒单 与 买卖任一方取消 都走这里。
      *
