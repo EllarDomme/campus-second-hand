@@ -58,7 +58,7 @@ foreach ($cand in @('mysql', 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.
     if (Get-Command $cand -ErrorAction SilentlyContinue) { $mysqlExe = (Get-Command $cand).Source; break }
 }
 $dbHost = 'localhost'; $dbPort = '3306'; $dbName = 'campus_second_hand'
-$dbUser = 'root'; $dbPass = ''
+$dbUser = 'root'; $dbPass = ''; $redisPass = ''
 if (Test-Path -LiteralPath $yml) {
     $raw = Get-Content -LiteralPath $yml -Raw
     if ($raw -match '(?m)^\s*host:\s*(\S+)')     { $dbHost = $Matches[1] }
@@ -66,7 +66,14 @@ if (Test-Path -LiteralPath $yml) {
     if ($raw -match '(?m)^\s*database:\s*(\S+)') { $dbName = $Matches[1] }
     if ($raw -match '(?m)^\s*username:\s*(\S+)') { $dbUser = $Matches[1] }
     if ($raw -match '(?m)^\s*password:\s*(\S+)') { $dbPass = $Matches[1] }
+    # ⚠️ yml 里 datasource 和 redis 各有一个 password: 字段，
+    #    上面那个匹配到的是 datasource 的；Redis 的要从 redis: 这一段里单独取
+    if ($raw -match '(?s)redis:(.*)') {
+        if ($Matches[1] -match '(?m)^\s*password:\s*(\S+)') { $redisPass = $Matches[1] }
+    }
 }
+# redis-cli 的认证参数（没配密码就不加 -a，否则会拿空字符串当密码去认证而报错）
+$redisAuth = @(); if ($redisPass) { $redisAuth = @('-a', $redisPass) }
 $canReset = ($mysqlExe -and $dbPass)
 
 function Invoke-ResetSql($sqlFile) {
@@ -145,7 +152,49 @@ if ($pyExe) {
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 7. 汇总 ----------
+# ---------- 7. 捡漏抢购 ----------
+Write-Head "④ 限时捡漏抢购（Redis 预扣 + 数据库兜底 + 并发压测）"
+if ($pyExe) {
+    Invoke-ResetSql 'test-reset-flashsale.sql' | Out-Null
+    # 说明：Redis 里的库存 key 由测试脚本自己调 POST /admin/flashSale/resetStock/{id} 清理。
+    #      不用 redis-cli 的原因：Windows 版 redis-cli 是 Cygwin 编译的，
+    #      在受限环境里会因创建命名对象失败而报 0xC0000022，根本跑不起来。
+
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\flashsale-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|捡漏抢购回归|RESULT|=====|【准备】|成功：|失败：|列表返回|  完成)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "捡漏抢购回归        : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+
+    # 数据层证据：MySQL 里放出去 1 件、Redis 库存扣到 0（两边一致）
+    if ($canReset) {
+        Write-Host "  --- 数据层核对（并发抢的那件：商品2）---"
+        $sqlCheck = @"
+SELECT CONCAT('  MySQL 抢购成功记录 = ', COUNT(*)) FROM $dbName.flash_sale_record WHERE product_id = 2 AND is_success = 1;
+SELECT CONCAT('  MySQL 捡漏订单     = ', COUNT(*)) FROM $dbName.trade_order WHERE product_id = 2 AND order_source = 3;
+SELECT CONCAT('  MySQL 商品2 状态   = ', status, '（1=交易中，说明已被锁走）') FROM $dbName.product WHERE id = 2;
+"@
+        & $mysqlExe "-h$dbHost" "-P$dbPort" "-u$dbUser" "-p$dbPass" -N -B -e $sqlCheck 2>&1 |
+            Where-Object { $_ -notmatch 'password on the command line' } | ForEach-Object { Write-Host $_ }
+        try {
+            $adminToken = (Invoke-RestMethod "$BaseUrl/admin/employee/login" -Method POST -TimeoutSec 10 `
+                -ContentType 'application/json; charset=utf-8' `
+                -Body ([System.Text.Encoding]::UTF8.GetBytes('{"username":"zhangsan","password":"123456"}'))).data.token
+            $stock = (Invoke-RestMethod "$BaseUrl/admin/flashSale/stock/2" -Headers @{ token = $adminToken } -TimeoutSec 10).data
+            Write-Host "  Redis 商品2 剩余库存 = '$stock'（0 或空=已扣光；空表示 key 不存在）"
+        } catch {
+            Write-Host "  （查 Redis 库存失败：$($_.Exception.Message)）"
+        }
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 8. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''

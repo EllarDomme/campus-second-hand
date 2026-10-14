@@ -5,6 +5,7 @@ import com.sky.annotation.AutoFill;
 import com.sky.dto.ProductPageQueryDTO;
 import com.sky.entity.Product;
 import com.sky.enumeration.OperationType;
+import com.sky.vo.FlashSaleVO;
 import com.sky.vo.ProductVO;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
@@ -91,5 +92,11 @@ public interface ProductMapper {
      * 按条件统计商品数量（数据统计用）
      */
     Integer countByMap(Map map);
+
+    /**
+     * 捡漏专区：捡漏商品 + 已过审 + 未被下架（在售或已被抢走的都列出来，后者显示"已抢光"）
+     * SQL 写在 ProductMapper.xml
+     */
+    List<FlashSaleVO> listFlashSale();
 
 }

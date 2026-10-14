@@ -178,10 +178,19 @@ public class BargainServiceImpl implements BargainService {
             throw new BaseException("议价记录不存在");
         }
 
-        // ② 按状态判断"谁有权接受"（一律用「允许法」：只有该做的人能过）
-        //    文案也要跟着逻辑走：现在拦住的是"非卖家/非买家"，
-        //    所以提示语要写"只有XX可以…"，而不是"YY不能…"
-        //    （否则一个跟这笔议价无关的陌生人会收到"买家不能接受自己的出价"，莫名其妙）
+        // ② 按状态判断"谁有权接受"
+        // ┌── 【错题标记 #7】权限判断用了「排除法」而不是「允许法」🔴安全级 ──
+        // │ 你当时写的：if (me.equals(bargain.getBuyerId())) throw "买家不能接受自己的出价";
+        // │ 为什么错：这只排除了"买家"，但跟这笔议价【毫无关系的第三人】呢？
+        // │           陌生人的 me 既不等于 buyerId 也不等于 sellerId，
+        // │           两个 if 都不命中 → 直接放行 → 他能替别人成交、锁掉别人的商品！
+        // │ 正确写法（白名单）：if (!me.equals(bargain.getSellerId())) throw ...
+        // │   你永远列不全"不该做的人"（陌生人、管理员、跑腿员…），
+        // │   但你能准确说出"该做的人是谁"。白名单是封闭的，黑名单是开放的。
+        // │ 附带：提示语也要跟着改 —— 现在拦的是"非卖家"，
+        // │   就该说"只有卖家可以接受这个报价"，而不是"买家不能接受自己的出价"
+        // │   （否则陌生人会收到一条跟他无关的提示，莫名其妙）
+        // └──────────────────────────────────────────────────────────────
         if(BargainConstant.STATUS_BUYER_OFFER.equals(bargain.getBargainStatus())){
             // 状态1：买家已出价 → 只有卖家能接受
             if(!me.equals(bargain.getSellerId())){
@@ -197,13 +206,23 @@ public class BargainServiceImpl implements BargainService {
         }
 
         // ③ 过期校验：到点了就不能再成交
-        //
-        // ⚠️ 这里有两个坑，之前都踩了：
-        //   ① 不要拿 orderId 判空！orderId 只有在"议价成交"之后才会被回填，
-        //      正常待处理的议价 orderId 本来就是 null —— 拿它当条件会导致【每一次接受都失败】。
-        //      要判空的是 expireTime（建表时是 DEFAULT NULL）。
-        //   ② 方向别写反：是"过期时间早于现在"才算过期。
-        //      now.isBefore(expireTime) 的意思是"还没到期"，拿它去抛"已过期"正好反了。
+        // ┌── 【错题标记 #6】过期校验连踩两个坑（一个致命、一个写反）────────
+        // │ 你当时写的：if (bargain.getOrderId() == null
+        // │                 || LocalDateTime.now().isBefore(bargain.getExpireTime())) throw "已过期";
+        // │
+        // │ 坑① 拿 orderId 判空 —— 【致命】
+        // │     orderId 只有在"议价成交"之后才会被回填，正常待处理的议价它本来就是 null。
+        // │     拿它当拒绝条件 → 每一次"接受报价"都会失败，功能直接全废。
+        // │     要判空的是 expireTime（建表时 DEFAULT NULL），不是 orderId。
+        // │
+        // │ 坑② 方向写反了
+        // │     now.isBefore(expireTime) 的意思是"【还】没到期"，
+        // │     却拿它去抛"已过期" → 条件成立与否完全相反。
+        // │     正确读法：expireTime.isBefore(now) = 过期时间已经早于现在 = 真的过期了。
+        // │
+        // │ 这是本项目第 3 次"守卫条件写反"（前两次在超时关单），
+        // │ 写完 if 一定要读一遍："这个条件成立时，我是在拦还是在放？"
+        // └──────────────────────────────────────────────────────────────
         if (bargain.getExpireTime() == null
                 || bargain.getExpireTime().isBefore(LocalDateTime.now())) {
             throw new BaseException("议价已过期，请重新发起");
@@ -258,9 +277,17 @@ public class BargainServiceImpl implements BargainService {
         }
 
         // ② 按状态判断"谁有权拒绝"（一律用「允许法」：只有该做的人能过）
-        //    状态 1（买家出价）→ 只有【卖家】能拒绝
-        //    状态 2（卖家还价）→ 只有【买家】能拒绝
-        //    其它状态（3已接受/4已拒绝/5已过期）→ "议价已结束，不能再操作"
+        // ┌── 【错题标记 #8】整段权限校验被漏写了（当时这里是空的）──────────
+        // │ 当时的情况：骨架留了"【你的部分 1】"，但没有填 → 这一段不存在。
+        // │ 后果：接口不会报错、日志一切正常，但【任何人都能拒绝别人的议价】。
+        // │       这就是"骨架能跑 ≠ 功能正确"最危险的地方 ——
+        // │       漏掉权限校验不会有任何报错，只有攻击者会笑。
+        // │ 规矩：写任何"改变状态"的接口时，第一件事就是问
+        // │       "谁有权做这件事？"，并且用白名单写出来。
+        // │ 状态 1（买家出价）→ 只有【卖家】能拒绝
+        // │ 状态 2（卖家还价）→ 只有【买家】能拒绝
+        // │ 其它状态（3已接受/4已拒绝/5已过期）→ "议价已结束，不能再操作"
+        // └──────────────────────────────────────────────────────────────
         if (BargainConstant.STATUS_BUYER_OFFER.equals(bargain.getBargainStatus())) {
             if (!me.equals(bargain.getSellerId())) {
                 throw new BaseException("只有卖家可以拒绝这个报价");
