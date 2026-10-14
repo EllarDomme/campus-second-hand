@@ -51,6 +51,11 @@ $cases = @(
 
     # ---------- S3-4c/S3-5a：新订单模块必须活着 ----------
     @{ Name='S3-4c-我的订单列表';      Method='GET';  Path='/user/order/page?page=1&pageSize=5&view=buyer'; NeedToken='user'; Expect=200; Contains='"code":1' }
+
+    # ---------- S3-6a：议价模块（数据隔离的完整断言见验收脚本）----------
+    @{ Name='S3-6a-我的议价列表';      Method='GET';  Path='/user/bargain/list?page=1&pageSize=5&view=buyer'; NeedToken='user'; Expect=200; Contains='"code":1' }
+    # 不传 view 时必须兜底成"我发起的"，绝不能因为过滤条件为空而返回全平台数据
+    @{ Name='S3-6a-议价不传view';      Method='GET';  Path='/user/bargain/list?page=1&pageSize=5'; NeedToken='user'; Expect=200; Contains='"code":1' }
 )
 
 function Send-Case {
