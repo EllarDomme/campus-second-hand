@@ -9,6 +9,9 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
 import org.apache.ibatis.annotations.Select;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 @Mapper
 public interface TradeOrderMapper {
 
@@ -49,5 +52,20 @@ public interface TradeOrderMapper {
      * 订单详情（也带商品标题/图片，所以返回 TradeOrderVO）
      */
     TradeOrderVO getVOById(Long id);
+
+    /**
+     * 查"超时未处理"的订单（定时任务用）
+     *
+     * status=0 同时覆盖两种情况，靠 pay_status 区分：
+     *   待支付（pay_status=0）—— 买家 15 分钟没付钱
+     *   待确认（pay_status=1）—— 卖家 30 分钟没确认
+     * 两者都由 expire_time 判定到点，具体怎么处理交给 Service（已支付就退款）。
+     *
+     * limit 500：一次最多处理 500 笔，避免某次积压太多把数据库拖住。
+     * 走索引 idx_status_pay_expire(status, pay_status, expire_time)。
+     */
+    @Select("select * from trade_order where status = 0 and expire_time is not null " +
+            "and expire_time < #{now} order by expire_time asc limit 500")
+    List<TradeOrder> listExpired(LocalDateTime now);
 
 }

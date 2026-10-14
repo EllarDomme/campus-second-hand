@@ -29,7 +29,12 @@ UPDATE product SET status=1 WHERE id=6;
 --    （订单是几天前创建的，expire_time 早就过期了）
 UPDATE trade_order SET expire_time = DATE_ADD(NOW(), INTERVAL 30 MINUTE) WHERE id IN (1,2,3,4,5);
 
--- 清掉测试产生的退款/放款流水，只保留两条真实支付流水
+-- 清掉测试产生的流水，让"资金侧"和"订单侧"对齐：
+--   订单1、2、3 在基线里是「从未支付」，所以要清掉它们的【全部】流水
+--   （注意：订单2 曾在取消测试里被支付过，会残留一条 PAY 流水，必须一起清掉，
+--     否则托管余额对账会算不平）
+DELETE FROM payment_record WHERE order_id IN (1, 2, 3);
+--   订单4、5 基线里是「已支付」，保留它们的 PAY 流水，只清退款/放款
 DELETE FROM payment_record WHERE pay_type IN (2, 3);
 
 -- 核对

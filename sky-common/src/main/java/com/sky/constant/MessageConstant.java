@@ -2,33 +2,28 @@ package com.sky.constant;
 
 /**
  * 信息提示常量类
+ *
+ * 说明：这里只保留「当前代码真正在用」的提示语。
+ * 改造过程中删掉了 15 个已经没有任何引用的旧常量（购物车/地址簿/套餐/菜品/旧订单相关的提示语），
+ * 留着它们只会让读代码的人误以为"某个功能还在"。
+ *
+ * 判断一个常量还有没有人用，最可靠的办法就是全局搜一下常量名（编译器不管未使用的常量，
+ * 所以死常量会一直静静躺着）。
  */
 public class MessageConstant {
 
+    // ===== 账号与登录 =====
     public static final String PASSWORD_ERROR = "密码错误";
     public static final String ACCOUNT_NOT_FOUND = "账号不存在";
     public static final String ACCOUNT_LOCKED = "账号被锁定";
-    public static final String UNKNOWN_ERROR = "未知错误";
-    public static final String USER_NOT_LOGIN = "用户未登录";
-    public static final String CATEGORY_BE_RELATED_BY_SETMEAL = "当前分类关联了套餐,不能删除";
-    public static final String CATEGORY_BE_RELATED_BY_DISH = "当前分类关联了菜品,不能删除";
-    public static final String SHOPPING_CART_IS_NULL = "购物车数据为空，不能下单";
-    public static final String ADDRESS_BOOK_IS_NULL = "用户地址为空，不能下单";
     public static final String LOGIN_FAILED = "登录失败";
-    public static final String UPLOAD_FAILED = "文件上传失败";
-    public static final String SETMEAL_ENABLE_FAILED = "套餐内包含未启售菜品，无法启售";
-    public static final String PASSWORD_EDIT_FAILED = "密码修改失败";
-    public static final String DISH_ON_SALE = "起售中的菜品不能删除";
-    public static final String SETMEAL_ON_SALE = "起售中的套餐不能删除";
-    public static final String DISH_BE_RELATED_BY_SETMEAL = "当前菜品关联了套餐,不能删除";
-    public static final String ORDER_STATUS_ERROR = "订单状态错误";
-    public static final String ORDER_NOT_FOUND = "订单不存在";
-    public static final String USER_CANCEL_ORDER = "用户取消订单";
-    public static final String TIMEOUT_CANCEL_ORDER = "订单超时未支付，自动取消";
     public static final String ALREADY_EXIST = "已存在";
-    public static final String ADDRESS_OUT_OF_RANGE = "当前地址超出配送范围，请重新选择收货地址";
 
-    // ===== 商品（校园二手）相关 =====
+    // ===== 通用 =====
+    public static final String UNKNOWN_ERROR = "未知错误";
+    public static final String UPLOAD_FAILED = "文件上传失败";
+
+    // ===== 商品（校园二手）=====
     public static final String PRODUCT_NOT_FOUND = "商品不存在";
     public static final String PRODUCT_IN_TRADE = "商品正在交易中，无法删除";
     public static final String PRODUCT_NOT_BELONG_TO_YOU = "只能操作自己发布的商品";

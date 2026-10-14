@@ -42,6 +42,15 @@ $cases = @(
     @{ Name='批次A-工作台已移除';      Method='GET';  Path='/admin/workspace/businessData';       NeedToken=$true; Expect=404 }
     @{ Name='批次A-营业额报表已移除';   Method='GET';  Path='/admin/report/turnoverStatistics?begin=2026-01-01&end=2026-12-31'; NeedToken=$true; Expect=404 }
     @{ Name='批次A-用户报表已移除';     Method='GET';  Path='/admin/report/userStatistics?begin=2026-01-01&end=2026-12-31';     NeedToken=$true; Expect=404 }
+
+    # ---------- S3-5b：购物车/地址簿/旧订单模块已删除，必须 404 ----------
+    @{ Name='S3-5b-购物车已删除';      Method='GET';  Path='/user/shoppingCart/list';              NeedToken='user'; Expect=404 }
+    @{ Name='S3-5b-地址簿已删除';      Method='GET';  Path='/user/addressBook/list';               NeedToken='user'; Expect=404 }
+    @{ Name='S3-5b-旧订单查询已删除';   Method='GET';  Path='/admin/order/conditionSearch?page=1&pageSize=5'; NeedToken=$true; Expect=404 }
+    @{ Name='S3-5b-旧订单统计已删除';   Method='GET';  Path='/admin/order/statistics';              NeedToken=$true; Expect=404 }
+
+    # ---------- S3-4c/S3-5a：新订单模块必须活着 ----------
+    @{ Name='S3-4c-我的订单列表';      Method='GET';  Path='/user/order/page?page=1&pageSize=5&view=buyer'; NeedToken='user'; Expect=200; Contains='"code":1' }
 )
 
 function Send-Case {

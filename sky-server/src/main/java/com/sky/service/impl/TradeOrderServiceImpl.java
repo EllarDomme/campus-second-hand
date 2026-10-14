@@ -405,7 +405,7 @@ public class TradeOrderServiceImpl implements TradeOrderService {
      *   ② 订单   → 已取消 + 原因（只有真付过钱才标"已退款"）
      *   ③ 商品   → 从"交易中"回退"在售"（条件更新 + 判影响行数）
      */
-    private void doCancelOrder(TradeOrder order, String reason) {
+    private void doCancelOrder(TradeOrder order, String reason, Integer cancelStatus) {
         boolean paid = OrderConstant.PAY_PAID.equals(order.getPayStatus());
 
         // ① 已支付 → 写退款流水
@@ -430,7 +430,7 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         //    否则那些从未支付的订单会被标成"已退款"——钱一分没收到，哪来的退款？
         TradeOrder.TradeOrderBuilder updateBuilder = TradeOrder.builder()
                 .id(order.getId())
-                .status(OrderConstant.STATUS_CANCELLED)
+                .status(cancelStatus)
                 .cancelReason(reason)
                 .updateTime(LocalDateTime.now());
         if (paid) {
@@ -469,7 +469,8 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         }
         checkReason(cancelDTO.getReason(), "拒单");
 
-        doCancelOrder(order, cancelDTO.getReason());
+        // 拒单/取消 → 终态是"已取消"(3)
+        doCancelOrder(order, cancelDTO.getReason(), OrderConstant.STATUS_CANCELLED);
         log.info("卖家拒单成功：订单id={}，卖家id={}，是否退款={}",
                 order.getId(), order.getSellerId(), OrderConstant.PAY_PAID.equals(order.getPayStatus()));
     }
@@ -495,7 +496,8 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         }
         checkReason(cancelDTO.getReason(), "取消");
 
-        doCancelOrder(order, cancelDTO.getReason());
+        // 拒单/取消 → 终态是"已取消"(3)
+        doCancelOrder(order, cancelDTO.getReason(), OrderConstant.STATUS_CANCELLED);
         log.info("订单已取消：订单id={}，操作人={}，是否退款={}",
                 order.getId(), me, OrderConstant.PAY_PAID.equals(order.getPayStatus()));
     }
@@ -553,5 +555,43 @@ public class TradeOrderServiceImpl implements TradeOrderService {
                 .build());
 
         log.info("买家确认收货：订单id={},买家={}",order.getId(),userId);
+    }
+
+    /**
+     * 超时关单（供定时任务调用）
+     *
+     * 参数为什么是 orderId 而不是整个 TradeOrder 对象：
+     *   定时任务扫完列表、到真正处理之间可能过了几十毫秒，
+     *   这期间买家可能刚好付款成功。如果直接信任列表里的旧对象，
+     *   就会按"未支付"处理 → 取消但不退款 → 买家的钱丢了。
+     *   所以只传 id，这里重新查最新状态。
+     *
+     * 三个 guard（守卫）判断的写法要领：
+     *   这里的 return 条件是「这单不该我处理」，而不是「这单正是我要处理的」。
+     *   写成后者最容易把条件写反（比如"status=0 就 return"——那正是要处理的单子）。
+     */
+    @Transactional
+    @Override
+    public void timeoutClose(Long orderId) {
+        // ① 重查一次，拿最新状态
+        TradeOrder order = tradeOrderMapper.getById(orderId);
+        if (order == null) {
+            return;
+        }
+        // ② 状态已经变了就放手走开（status≠0 说明已被卖家确认 / 被取消 / 已完成）
+        if (!OrderConstant.STATUS_PENDING_CONFIRM.equals(order.getStatus())) {
+            return;
+        }
+        // ③ 还没到点也放手走开（expireTime 为 null 视为不超时）
+        if (order.getExpireTime() == null || order.getExpireTime().isAfter(LocalDateTime.now())) {
+            return;
+        }
+
+        // ④ 交给公共逻辑：
+        //    它内部会自动判断"已支付就写退款流水、未支付就不写"，并回退商品状态；
+        //    终态传"超时取消(4)"而不是"已取消(3)"，因为这是超时关单，语义不同。
+        log.info("超时关单：orderId={}，是否已支付={}",
+                order.getId(), OrderConstant.PAY_PAID.equals(order.getPayStatus()));
+        doCancelOrder(order, "订单超时未处理，系统自动关闭", OrderConstant.STATUS_TIMEOUT_CANCELLED);
     }
 }

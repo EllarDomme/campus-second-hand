@@ -30,7 +30,21 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * 微信支付工具类
+ * 微信支付工具类（真实资金通道的参考实现）
+ *
+ * ⚠️ 本类在当前业务流程中【不会被调用】，是【有意保留】的，不是漏删的：
+ *
+ *   1. 我们的支付走的是「模拟通道」（TradeOrderServiceImpl.pay + PayNotifyController），
+ *      原因：微信支付需要企业资质与商户号，校园项目拿不到；平台代收代付还涉及资金池合规。
+ *   2. 但担保交易的【业务链路】是完整实现的：下单 → 支付 → 托管 → 放款/退款，
+ *      每一步都写进了 payment_record 流水表，具备对账能力。
+ *   3. 保留本类的价值：它是"换成真实通道需要做什么"的具体参照——
+ *      下单调 JSAPI 拿 prepay_id、回调要验签解密、退款调 refund 接口。
+ *      将来接真实通道，只需把模拟的"发起支付/回调"两处换成这里的调用，
+ *      订单状态流转、幂等、对账这些逻辑一行都不用改。
+ *
+ * 如果不需要这份参照，可以直接删除本类（它没有任何引用），
+ * 届时 sky-server 的 pom 里 wechatpay-apache-httpclient 依赖也可以一并去掉。
  */
 @Component
 public class WeChatPayUtil {

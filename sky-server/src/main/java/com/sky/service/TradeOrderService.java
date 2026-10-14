@@ -57,5 +57,8 @@ public interface TradeOrderService {
     //买家确认收货
     void complete(Long orderId);
 
+    //超时关单
+    void timeoutClose(Long orderId);
+
 
 }
