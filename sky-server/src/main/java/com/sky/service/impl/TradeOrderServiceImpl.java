@@ -7,7 +7,7 @@ import com.sky.constant.OrderConstant;
 import com.sky.constant.ProductConstant;
 import com.sky.context.BaseContext;
 import com.sky.dto.TradeOrderPageQueryDTO;
-import com.sky.dto.TradeOrderRejectionDTO;
+import com.sky.dto.TradeOrderCancelDTO;
 import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.entity.PaymentRecord;
 import com.sky.entity.Product;
@@ -20,6 +20,7 @@ import com.sky.mapper.TradeOrderMapper;
 import com.sky.mapper.UserMapper;
 import com.sky.result.PageResult;
 import com.sky.service.TradeOrderService;
+import com.sky.task.OrderTask;
 import com.sky.vo.TradeOrderPayVO;
 import com.sky.vo.TradeOrderSubmitVO;
 import com.sky.vo.TradeOrderVO;
@@ -47,6 +48,8 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     private PaymentRecordMapper paymentRecordMapper;
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private OrderTask orderTask;
 
     /**
      * 买家下单
@@ -160,7 +163,7 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         }
 
         // 生成支付流水号，并写回订单（回调只带回来 payNo，靠它找到订单）
-        String payNo = generatePayNo();
+        String payNo = generateFlowNo("PAY");
         tradeOrderMapper.update(TradeOrder.builder()
                 .id(order.getId())
                 .payNo(payNo)
@@ -254,23 +257,18 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     }
 
     /**
-     * 生成支付流水号：PAY + 年月日时分秒 + 4 位随机数
-     */
-    private String generatePayNo() {
-        String time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        return "PAY" + time + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
-    }
-
-    /**
-     * 生成退款流水号：REF + 年月日时分秒 + 4 位随机数
+     * 生成资金流水号：前缀 + 年月日时分秒 + 4 位随机数
      *
-     * 必须和支付流水号用不同前缀，两个原因：
-     *   ① payment_record.pay_no 有唯一索引，退款不能复用原支付流水号，否则撞唯一键
-     *   ② 前缀区分开后，看流水表时一眼能分清"收款"和"退款"
+     * 三种流水共用这一个方法，只靠前缀区分（原来是三个几乎一样的方法，合并成参数化）：
+     *   PAY = 支付     REF = 退款     SET = 放款（结算给卖家）
+     *
+     * 为什么每种流水都必须有自己的号（不能复用）：
+     *   ① payment_record.pay_no 上有唯一索引，复用会撞唯一键报错
+     *   ② 前缀区分开后，看流水表时一眼能分清这笔钱是收、是退、还是放给卖家
      */
-    private String generateRefundNo() {
+    private String generateFlowNo(String prefix) {
         String time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        return "REF" + time + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+        return prefix + time + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
     }
 
     /**
@@ -369,76 +367,191 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     }
 
 
-    @Transactional
-    @Override
-    public void reject(TradeOrderRejectionDTO rejectionDTO) {
-        //查订单，不存在的话就报错
-        TradeOrder order = tradeOrderMapper.getById(rejectionDTO.getId());
-        if(order == null){
+    // ==================== 订单取消：公共逻辑 + 两个入口 ====================
+
+    /**
+     * 查订单，查不到直接抛异常（拒单/取消都要用）
+     */
+    private TradeOrder getOrderOrThrow(Long orderId) {
+        TradeOrder order = tradeOrderMapper.getById(orderId);
+        if (order == null) {
             throw new BaseException("订单不存在");
         }
+        return order;
+    }
 
-        Long userId = BaseContext.getCurrentId();
-
-        //只有卖家本人才能够拒绝
-        if(!userId.equals(order.getSellerId())){
-            throw new BaseException("您没有权限拒绝该订单");
+    /**
+     * 原因校验（拒单/取消都要用）
+     *
+     * @param action 动作名，用来拼提示语（"拒单" / "取消"），这样两个入口都能给出准确的提示
+     */
+    private void checkReason(String reason, String action) {
+        // trim 后判断，"   " 这种全空格也算空
+        if (reason == null || reason.trim().isEmpty()) {
+            throw new BaseException(action + "原因不能为空");
         }
+    }
 
-        //状态：必须待确认
-        if(!order.getStatus().equals(OrderConstant.STATUS_PENDING_CONFIRM)) {
-            throw new BaseException("订单状态不是待确认，不能拒绝");
-        }
+    /**
+     * 【取消订单的公共逻辑】卖家拒单 与 买卖任一方取消 都走这里。
+     *
+     * 调用方负责各自不同的部分（这些不能放进来）：
+     *   ① 权限校验：拒单只有卖家；取消买卖双方都行
+     *   ② 状态校验：拒单必须"待确认"；取消在"交易前"都能做
+     *
+     * 这里只做"取消本身"必须做的三件事，
+     * 依赖调用方方法上的 @Transactional 保证它们一起成功、或一起失败：
+     *   ① 已支付 → 写一条退款流水
+     *   ② 订单   → 已取消 + 原因（只有真付过钱才标"已退款"）
+     *   ③ 商品   → 从"交易中"回退"在售"（条件更新 + 判影响行数）
+     */
+    private void doCancelOrder(TradeOrder order, String reason) {
+        boolean paid = OrderConstant.PAY_PAID.equals(order.getPayStatus());
 
-        //拒单原因不能为空（trim 后判断，"   " 这种全空格也算空）
-        if(rejectionDTO.getReason() == null || rejectionDTO.getReason().trim().isEmpty()){
-            throw new BaseException("拒单原因不能为空");
-        }
-
-        //如果已支付，就写一条退款流水记录
-        //退款流水号必须【新生成一个】（前缀用 REF）：
-        //   payment_record.pay_no 上有唯一索引，若复用原支付流水号会直接撞唯一键报错；
-        //   而且退款和收款前缀区分开，对账时一眼能看出哪条是退钱。
-        if(OrderConstant.PAY_PAID.equals(order.getPayStatus())){
+        // ① 已支付 → 写退款流水
+        // 退款流水号必须【新生成一个】（前缀 REF）：
+        //   payment_record.pay_no 上有唯一索引，复用原支付流水号会直接撞唯一键报错
+        if (paid) {
             paymentRecordMapper.insert(PaymentRecord.builder()
                     .orderId(order.getId())
                     .orderNo(order.getOrderNo())
-                    .payNo(generateRefundNo())
+                    .payNo(generateFlowNo("REF"))
                     .payType(OrderConstant.PAY_TYPE_REFUND)
                     .amount(order.getRealPrice())
-                    .remark("卖家拒单退款，原支付流水号=" + order.getPayNo())
+                    .remark("订单取消退款，原支付流水号=" + order.getPayNo())
                     .status(1)
                     .createTime(LocalDateTime.now())
                     .updateTime(LocalDateTime.now())
                     .build());
         }
 
-        //更新订单：状态改"已取消"
-        //⚠️ 只有【真的付过钱】才把 payStatus 标成"已退款"。
-        //   如果无条件写 2，那些从未支付的订单会被标成"已退款"——钱一分没收到，哪来的退款？
+        // ② 订单 → 已取消
+        // ⚠️ 只有【真的付过钱】才把 payStatus 标成"已退款"。
+        //    否则那些从未支付的订单会被标成"已退款"——钱一分没收到，哪来的退款？
         TradeOrder.TradeOrderBuilder updateBuilder = TradeOrder.builder()
                 .id(order.getId())
                 .status(OrderConstant.STATUS_CANCELLED)
-                .cancelReason(rejectionDTO.getReason())
+                .cancelReason(reason)
                 .updateTime(LocalDateTime.now());
-        if (OrderConstant.PAY_PAID.equals(order.getPayStatus())) {
+        if (paid) {
             updateBuilder.payStatus(OrderConstant.PAY_REFUNDED);
         }
         tradeOrderMapper.update(updateBuilder.build());
 
-        //商品回退：交易中 → 在售
-        //用【条件更新】而不是无条件 updateById：
+        // ③ 商品 → 交易中回退成在售
+        // 用【条件更新】而不是无条件 updateById：
         //   只有商品当前确实是"交易中"才回退，避免把已下架/已售罄的商品错误复活成"在售"。
-        //返回 0 说明商品状态不是"交易中"，此时抛异常 → 整个事务回滚（退款流水也一起撤销），
-        //保证"订单、资金、商品"三者不会各说各话。
+        // 影响 0 行 → 抛异常 → 整个事务回滚（退款流水也一起撤销），
+        // 保证"订单、资金、商品"三者不会各说各话。
         int back = productMapper.updateStatusIfMatch(order.getProductId(),
                 ProductConstant.IN_TRADE,
                 ProductConstant.ON_SALE);
         if (back == 0) {
             throw new BaseException("商品状态异常，无法回退到在售");
         }
+    }
 
+    /**
+     * 卖家拒单：待确认(0) → 已取消(3)
+     */
+    @Transactional
+    @Override
+    public void reject(TradeOrderCancelDTO cancelDTO) {
+        TradeOrder order = getOrderOrThrow(cancelDTO.getId());
+
+        // 只有卖家本人能拒单
+        if (!BaseContext.getCurrentId().equals(order.getSellerId())) {
+            throw new BaseException("您没有权限拒绝该订单");
+        }
+        // 只有"待确认"能拒单（已经确认过的订单不该再拒）
+        if (!OrderConstant.STATUS_PENDING_CONFIRM.equals(order.getStatus())) {
+            throw new BaseException("订单状态不是待确认，不能拒绝");
+        }
+        checkReason(cancelDTO.getReason(), "拒单");
+
+        doCancelOrder(order, cancelDTO.getReason());
         log.info("卖家拒单成功：订单id={}，卖家id={}，是否退款={}",
-                order.getId(), userId, OrderConstant.PAY_PAID.equals(order.getPayStatus()));
+                order.getId(), order.getSellerId(), OrderConstant.PAY_PAID.equals(order.getPayStatus()));
+    }
+
+    /**
+     * 取消订单（交易前，买卖任一方都可以）
+     */
+    @Transactional
+    @Override
+    public void cancel(TradeOrderCancelDTO cancelDTO) {
+        TradeOrder order = getOrderOrThrow(cancelDTO.getId());
+
+        Long me = BaseContext.getCurrentId();
+        // 买卖双方都能取消；跟这单无关的人不行
+        if (!me.equals(order.getBuyerId()) && !me.equals(order.getSellerId())) {
+            throw new BaseException("您没有权限取消该订单");
+        }
+        // "交易前"= 待确认(0) 或 待交易(1)；已完成/已取消/超时取消都是终态，不能再取消
+        boolean beforeTrade = OrderConstant.STATUS_PENDING_CONFIRM.equals(order.getStatus())
+                || OrderConstant.STATUS_PENDING_TRADE.equals(order.getStatus());
+        if (!beforeTrade) {
+            throw new BaseException("订单已进入终态，不能取消");
+        }
+        checkReason(cancelDTO.getReason(), "取消");
+
+        doCancelOrder(order, cancelDTO.getReason());
+        log.info("订单已取消：订单id={}，操作人={}，是否退款={}",
+                order.getId(), me, OrderConstant.PAY_PAID.equals(order.getPayStatus()));
+    }
+
+    @Transactional
+    @Override
+    public void complete(Long orderId) {
+        //先查询本人的id
+        Long userId = BaseContext.getCurrentId();
+
+        //查订单，看订单是否存在
+        TradeOrder order = tradeOrderMapper.getById(orderId);
+        if(order == null){
+            throw new BaseException("订单不存在");
+        }
+
+        //只有买家本人才能够确认收货
+        if(!userId.equals(order.getBuyerId())){
+            throw new BaseException("您没有权限确认收货");
+        }
+
+        //订单状态必须是待交易
+        if(!OrderConstant.STATUS_PENDING_TRADE.equals(order.getStatus())){
+            throw new BaseException("订单状态不是待交易，不能确认收货");
+        }
+
+        //更新订单状态：修改为已完成+完成时间
+        tradeOrderMapper.update(TradeOrder.builder()
+                .id(order.getId())
+                .status(OrderConstant.STATUS_COMPLETED)
+                .finishTime(LocalDateTime.now())
+                .updateTime(LocalDateTime.now())
+                .build());
+
+        //将商品状态从交易中变成已售罄
+        int back = productMapper.updateStatusIfMatch(order.getProductId(),
+                ProductConstant.IN_TRADE,
+                ProductConstant.SOLD_OUT);
+
+        if(back == 0){
+            throw new BaseException("商品状态异常，无法确认收货");
+        }
+
+        //写一条结算流水
+        paymentRecordMapper.insert(PaymentRecord.builder()
+                .orderId(order.getId())
+                .orderNo(order.getOrderNo())
+                .payNo(generateFlowNo("SET"))
+                .payType(OrderConstant.PAY_TYPE_SETTLE)
+                .amount(order.getRealPrice())
+                .remark("买家确认收货，原支付流水号=" + order.getPayNo())
+                .status(1)
+                .createTime(LocalDateTime.now())
+                .updateTime(LocalDateTime.now())
+                .build());
+
+        log.info("买家确认收货：订单id={},买家={}",order.getId(),userId);
     }
 }

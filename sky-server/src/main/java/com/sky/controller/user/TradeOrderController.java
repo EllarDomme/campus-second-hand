@@ -1,7 +1,7 @@
 package com.sky.controller.user;
 
 import com.sky.dto.TradeOrderPageQueryDTO;
-import com.sky.dto.TradeOrderRejectionDTO;
+import com.sky.dto.TradeOrderCancelDTO;
 import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.result.PageResult;
 import com.sky.result.Result;
@@ -86,9 +86,34 @@ public class TradeOrderController {
 
     @PutMapping("/reject")
     @ApiOperation("卖家拒绝订单")
-    public Result reject(@RequestBody TradeOrderRejectionDTO rejectionDTO) {
-        log.info("卖家拒绝订单：{}", rejectionDTO);
-        tradeOrderService.reject(rejectionDTO);
+    public Result reject(@RequestBody TradeOrderCancelDTO cancelDTO) {
+        log.info("卖家拒绝订单：{}", cancelDTO);
+        tradeOrderService.reject(cancelDTO);
+        return Result.success();
+    }
+
+    /**
+     * 取消订单（交易前，买卖任一方都能取消）
+     * 用法：PUT /user/order/cancel   body: {"id":4,"reason":"临时有事，买不了了"}
+     *
+     * 和拒单的区别只有"谁能发起"：
+     *   拒单 → 只有卖家（卖家不想卖）
+     *   取消 → 买卖双方都行（买家反悔，或卖家不想卖也可以走这里）
+     * 所以两者共用同一个 DTO；Service 里的核心逻辑也是同一份（doCancelOrder）。
+     */
+    @PutMapping("/cancel")
+    @ApiOperation("取消订单（交易前，买卖双方都能取消）")
+    public Result cancel(@RequestBody TradeOrderCancelDTO cancelDTO) {
+        log.info("取消订单：{}", cancelDTO);
+        tradeOrderService.cancel(cancelDTO);
+        return Result.success();
+    }
+
+    @PutMapping("/complete/{id}")
+    @ApiOperation("买家确认收货")
+    public Result complete(@PathVariable Long id) {
+        log.info("买家确认收货：{}", id);
+        tradeOrderService.complete(id);
         return Result.success();
     }
 

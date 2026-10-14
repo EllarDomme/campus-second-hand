@@ -44,10 +44,18 @@ public class OrderConstant {
     public static final Integer PAY_REFUNDED = 2;
 
     // ===== 支付流水类型 =====
-    /** 支付 */
+    /** 支付：买家付款，钱进平台托管 */
     public static final Integer PAY_TYPE_PAY = 1;
-    /** 退款 */
+    /** 退款：卖家拒单 / 取消订单，钱退回买家 */
     public static final Integer PAY_TYPE_REFUND = 2;
+    /**
+     * 放款（结算给卖家）：买家确认收货后，平台把托管的钱结算给卖家。
+     *
+     * 加上这一条，一笔订单的资金流才真正闭环：
+     *   支付(+66) → 平台托管 → 确认收货则放款(−66 给卖家)，取消/拒单则退款(−66 回买家)
+     * 平台在某一单上的托管余额 = 支付 − 退款 − 放款，订单终结时必然是 0。
+     */
+    public static final Integer PAY_TYPE_SETTLE = 3;
 
     // ===== 超时时长（分钟）=====
     /** 普通订单：15 分钟未支付自动关单 */

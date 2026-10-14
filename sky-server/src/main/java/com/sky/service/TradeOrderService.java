@@ -1,7 +1,7 @@
 package com.sky.service;
 
 import com.sky.dto.TradeOrderPageQueryDTO;
-import com.sky.dto.TradeOrderRejectionDTO;
+import com.sky.dto.TradeOrderCancelDTO;
 import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.result.PageResult;
 import com.sky.vo.TradeOrderPayVO;
@@ -47,8 +47,15 @@ public interface TradeOrderService {
     //卖家确认订单
     void confirm(Long orderId);
 
-    //卖家拒绝订单
-    void reject(TradeOrderRejectionDTO rejectionDTO);
+    //卖家拒绝订单（待确认 → 已取消；已支付则退款，商品回退在售）
+    //注意：拒单和取消共用同一个 DTO，因为形状一样（哪个订单 + 原因）
+    void reject(TradeOrderCancelDTO rejectDTO);
+
+    //取消订单（交易前，买卖任一方都能取消；已支付则退款，商品回退在售）
+    void cancel(TradeOrderCancelDTO cancelDTO);
+
+    //买家确认收货
+    void complete(Long orderId);
 
 
 }
