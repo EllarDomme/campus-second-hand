@@ -382,6 +382,27 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     }
 
     /**
+     * 捡漏抢购成功后的订单（对外暴露给 FlashSaleService 用的语义化入口）
+     *
+     * 和"议价成交"一样，只是把捡漏场景的固定参数替调用方填好：
+     *   订单来源 = 捡漏抢购(3)
+     *   未支付超时 = 10 分钟（EXPIRE_MINUTES_FLASH_SALE，与抢购窗口一致）
+     *   交易地点 = 空（抢购时买家没填，之后可用 /user/order/pickup/{id} 补充）
+     */
+    @Override
+    public TradeOrder createFlashSaleOrder(Product product, Long buyerId, BigDecimal price) {
+        return createOrder(
+                product,
+                buyerId,
+                price,
+                OrderConstant.SOURCE_FLASH_SALE,
+                OrderConstant.DEAL_SELF_PICKUP,
+                OrderConstant.EXPIRE_MINUTES_FLASH_SALE,
+                null,
+                "捡漏抢购成功");
+    }
+
+    /**
      * 买家补充/修改交易地点
      *
      * 交易地点是双方碰面的依据 —— 如果卖家或陌生人都能改，买家可能白跑一趟，

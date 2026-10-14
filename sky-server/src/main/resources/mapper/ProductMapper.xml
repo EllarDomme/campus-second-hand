@@ -104,4 +104,22 @@
         </where>
     </select>
 
+    <!-- 捡漏专区：捡漏 + 已过审 + 未下架（在售0 / 交易中1 都查出来，后者前端显示"已抢光"） -->
+    <select id="listFlashSale" resultType="com.sky.vo.FlashSaleVO">
+        select p.id,
+               p.title,
+               p.images,
+               p.price,
+               p.condition_level  conditionLevel,
+               p.flash_start_time flashStartTime,
+               p.status,
+               u.nickname         sellerName
+        from product p
+        left join user u on p.seller_id = u.id
+        where p.is_flash_sale = 1
+          and p.audit_status = 1
+          and p.status in (0, 1)
+        order by p.flash_start_time asc, p.id desc
+    </select>
+
 </mapper>

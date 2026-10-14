@@ -88,4 +88,12 @@ public interface TradeOrderService {
      */
     void updatePickupPlace(Long orderId, String pickupPlace);
 
+    /**
+     * 捡漏抢购成功后的订单（供 FlashSaleService 调用）
+     *
+     * 内部会锁定商品（在售 → 交易中，条件更新是"不超卖"的最终保证）。
+     * 订单来源 = 捡漏抢购(3)；未支付超时用【10 分钟】，与抢购窗口一致。
+     */
+    TradeOrder createFlashSaleOrder(Product product, Long buyerId, BigDecimal price);
+
 }
