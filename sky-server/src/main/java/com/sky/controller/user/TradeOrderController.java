@@ -117,6 +117,21 @@ public class TradeOrderController {
         return Result.success();
     }
 
+    /**
+     * 买家补充/修改交易地点
+     * 用法：PUT /user/order/pickup/6?pickupPlace=3号宿舍楼下
+     *
+     * 为什么需要它：议价成交生成的订单交易地点是空的（买家没走下单页面），
+     * 需要能后补，否则双方不知道去哪里面交。
+     */
+    @PutMapping("/pickup/{id}")
+    @ApiOperation("买家补充/修改交易地点")
+    public Result pickup(@PathVariable Long id, @RequestParam String pickupPlace) {
+        log.info("买家填写交易地点：orderId={}, pickupPlace={}", id, pickupPlace);
+        tradeOrderService.updatePickupPlace(id, pickupPlace);
+        return Result.success();
+    }
+
 
 
 }

@@ -136,6 +136,23 @@ check("T18", "重复取消订单2（已是终态）", "订单已进入终态",
 check("T19", "取消一个不存在的订单", "订单不存在",
       call("PUT", "/user/order/cancel", Ho, {"id": 9999, "reason": "测试"}))
 
+# 四、普通下单 submit（用 sql/test-reset.sql 里专造的商品 100 / 101）
+#   这一节的存在意义：submit 是"锁商品 + 建订单"公共逻辑的调用方之一，
+#   抽取/重构它时必须能被回归盯住，否则改坏了都不知道。
+print("\n===== 四、普通下单 submit（4 项）=====")
+check("T20", "学姐下单自己的商品100", "不能购买自己发布的商品",
+      call("POST", "/user/order/submit", Hs,
+           {"productId": 100, "dealType": 0, "pickupPlace": "回归测试地点"}))
+check("T21", "小明下单商品100（应成功）", "code=1",
+      call("POST", "/user/order/submit", Hb,
+           {"productId": 100, "dealType": 0, "pickupPlace": "回归测试地点", "remark": "回归"}))
+check("T22", "小明再下单商品100（已被锁成交易中）", "商品当前不可购买",
+      call("POST", "/user/order/submit", Hb,
+           {"productId": 100, "dealType": 0, "pickupPlace": "回归测试地点"}))
+check("T23", "小明下单商品101（未过审）", "商品还未通过审核",
+      call("POST", "/user/order/submit", Hb,
+           {"productId": 101, "dealType": 0, "pickupPlace": "回归测试地点"}))
+
 # ============ 汇总 ============
 total = passed + failed
 print("\n" + "=" * 60)

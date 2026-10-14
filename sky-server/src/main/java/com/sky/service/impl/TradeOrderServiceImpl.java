@@ -27,6 +27,7 @@ import org.springframework.dao.DuplicateKeyException;   // 填空④ 会用到�
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ThreadLocalRandom;
@@ -56,9 +57,11 @@ import java.util.concurrent.ThreadLocalRandom;
  *   【公共逻辑 · 订单号】          generateOrderNo()
  *        被 2 处复用：普通下单 ／ 议价成交下单
  *
- *   【公共逻辑 · 创建订单】        createOrder(...)   ← S3-6b 抽出
- *        被 2 处复用：普通下单 submit ／ 议价成交 accept
- *        （"锁商品 + 建订单 + 算超时"这三件事只写一份）
+ *   【公共逻辑 · 创建订单】        createOrder(product, buyerId, price, orderSource,
+ *                                            dealType, expireMinutes, pickupPlace, remark)
+ *        被 2 处复用：普通下单 submit ／ 议价成交 accept（S3-6b）
+ *        它做"锁商品 + 建订单 + 算超时"三件事，只写一份；
+ *        调用方只传各自不同的部分：成交价来源、订单来源、超时时长、交易地点、备注
  *
  * --------------------------------------------------------------------------
  * 本类之外还有一个更重要的公共逻辑：
@@ -108,40 +111,18 @@ public class TradeOrderServiceImpl implements TradeOrderService {
             throw new BaseException("不能购买自己发布的商品");
         }
 
-        // ---------- ② 锁定商品（这是"一件商品只能卖给一个人"的关键）----------
-        // 用「条件更新」而不是"先查再改"：
-        //   先查再改在并发下会失效（两个人同时查到"在售"，然后都去改成"交易中"）。
-        //   条件更新把判断和修改合成一条 SQL，靠数据库行锁保证原子性：
-        //   只有第一条 update 能影响 1 行，第二条影响 0 行（因为 status 已经不是 0 了）。
-        int locked = productMapper.updateStatusIfMatch(
-                product.getId(), ProductConstant.ON_SALE, ProductConstant.IN_TRADE);
-        if (locked == 0) {
-            throw new BaseException("手慢了，商品已被别人拍下");
-        }
-
-        // ---------- ③ 创建订单 ----------
-        TradeOrder order = TradeOrder.builder()
-                .orderNo(generateOrderNo())
-                .sellerId(product.getSellerId())
-                .buyerId(buyerId)
-                .productId(product.getId())
-                // 成交价取商品标价：普通下单没有议价环节，价格由后端定，不接受前端传
-                .realPrice(product.getPrice())
-                .dealType(submitDTO.getDealType() == null
-                        ? OrderConstant.DEAL_SELF_PICKUP : submitDTO.getDealType())
-                .orderSource(OrderConstant.SOURCE_NORMAL)
-                // 订单状态"待确认" + 支付状态"未支付" = 前端看到的"待支付"
-                .status(OrderConstant.STATUS_PENDING_CONFIRM)
-                .payStatus(OrderConstant.PAY_UNPAID)
-                .pickupPlace(submitDTO.getPickupPlace())
-                .remark(submitDTO.getRemark())
-                // 未支付超时：普通订单 15 分钟
-                .expireTime(LocalDateTime.now().plusMinutes(OrderConstant.EXPIRE_MINUTES_NORMAL))
-                .createTime(LocalDateTime.now())
-                .updateTime(LocalDateTime.now())
-                .build();
-
-        tradeOrderMapper.insert(order);
+        // ---------- ②③ 锁定商品 + 创建订单 ----------
+        // 这两件事与"议价成交下单"完全一样，已抽成公共逻辑 createOrder（见下方同名方法）
+        TradeOrder order = createOrder(
+                product,
+                buyerId,
+                product.getPrice(),          // 普通下单：成交价取商品标价
+                OrderConstant.SOURCE_NORMAL,
+                submitDTO.getDealType() == null
+                        ? OrderConstant.DEAL_SELF_PICKUP : submitDTO.getDealType(),
+                OrderConstant.EXPIRE_MINUTES_NORMAL,   // 普通订单未支付超时 15 分钟
+                submitDTO.getPickupPlace(),
+                submitDTO.getRemark());
 
         log.info("下单成功：orderNo={}, buyerId={}, productId={}, 金额={}",
                 order.getOrderNo(), buyerId, product.getId(), order.getRealPrice());
@@ -316,6 +297,134 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     private String generateOrderNo() {
         String time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
         return time + String.format("%04d", ThreadLocalRandom.current().nextInt(10000));
+    }
+
+    // ==========================================================================
+    // 【公共逻辑 · 创建订单】被 2 处复用：普通下单 submit ／ 议价成交 accept
+    // --------------------------------------------------------------------------
+    //   做三件事：① 锁定商品（在售 → 交易中）② 补齐订单公共字段 ③ 落库
+    //   ⚠️ 顺序不能反：先锁商品、再落库 —— 锁失败就不该产生订单
+    //   ⚠️ 订单号/状态/支付状态/时间这些"每个订单都一样"的字段由本方法统一填，
+    //      不让两个调用方各写一遍（写得不一致就会出现"有的订单没有 expireTime"这类问题）
+    //   调用方只负责各自不同的部分：成交价来源、orderSource、超时时长、交易地点、备注
+    // ==========================================================================
+    /**
+     * 创建订单（锁定商品 + 落库）
+     *
+     * @param product       已校验过"可买"的商品（存在、已过审、在售、且不是买家自己的）
+     * @param buyerId       买家 id（调用方从登录态取，不接受前端传）
+     * @param price         成交价（由调用方决定来源：普通=标价 / 议价=议价金额；不接受前端传）
+     * @param orderSource   订单来源：1普通下单 2议价生成 3捡漏抢购
+     * @param dealType      交易方式：0自提 1跑腿
+     * @param expireMinutes 未支付超时分钟数（普通 15 / 捡漏 10）
+     * @param pickupPlace   交易地点（议价成交时为空，买家随后可以补充）
+     * @param remark        买家备注（可为 null）
+     * @return 落库后的订单对象（自增 id 已回填）
+     */
+    private TradeOrder createOrder(Product product, Long buyerId, BigDecimal price,
+                                   Integer orderSource, Integer dealType, int expireMinutes,
+                                   String pickupPlace, String remark) {
+        // ① 锁定商品：只有当前是"在售"才能锁成"交易中"
+        //    条件更新把"判断 + 修改"合成一条 SQL，靠数据库行锁保证并发下只有一个人成功
+        //    （另一个人影响 0 行 → 抛异常 → 事务回滚，不会出现"一件商品卖出两份"）
+        int locked = productMapper.updateStatusIfMatch(
+                product.getId(), ProductConstant.ON_SALE, ProductConstant.IN_TRADE);
+        if (locked == 0) {
+            throw new BaseException("手慢了，商品已被别人拍下");
+        }
+
+        // ② 补齐公共字段并落库
+        LocalDateTime now = LocalDateTime.now();
+        TradeOrder order = TradeOrder.builder()
+                .orderNo(generateOrderNo())
+                .sellerId(product.getSellerId())
+                .buyerId(buyerId)
+                .productId(product.getId())
+                .realPrice(price)
+                .dealType(dealType)
+                .orderSource(orderSource)
+                // "待确认" + "未支付" = 前端看到的"待支付"
+                .status(OrderConstant.STATUS_PENDING_CONFIRM)
+                .payStatus(OrderConstant.PAY_UNPAID)
+                .pickupPlace(pickupPlace)
+                .remark(remark)
+                .expireTime(now.plusMinutes(expireMinutes))
+                .createTime(now)
+                .updateTime(now)
+                .build();
+        tradeOrderMapper.insert(order);
+        return order;
+    }
+
+    /**
+     * 议价成交后生成订单（对外暴露给 BargainService 用的语义化入口）
+     *
+     * 它只是把"议价场景的固定参数"替调用方填好，再转交给上面的私有 createOrder：
+     *   订单来源 = 议价生成(2)
+     *   交易方式 = 自提（议价成交默认当面交易）
+     *   超时     = 普通订单 15 分钟
+     *   交易地点 = 空（议价时买家没填，之后可在订单上补充）
+     *
+     * 这样设计的好处：8 个参数的"通用建单"留在私有层，对外只暴露 3 个参数的业务入口，
+     * 调用方不需要知道 orderSource 该填几、超时该填多少。
+     */
+    @Override
+    public TradeOrder createBargainOrder(Product product, Long buyerId, BigDecimal price) {
+        return createOrder(
+                product,
+                buyerId,
+                price,
+                OrderConstant.SOURCE_BARGAIN,
+                OrderConstant.DEAL_SELF_PICKUP,
+                OrderConstant.EXPIRE_MINUTES_NORMAL,
+                null,
+                "议价成交");
+    }
+
+    /**
+     * 买家补充/修改交易地点
+     *
+     * 交易地点是双方碰面的依据 —— 如果卖家或陌生人都能改，买家可能白跑一趟，
+     * 所以权限卡得很紧：只有买家本人、且订单还没结束。
+     */
+    @Override
+    public void updatePickupPlace(Long orderId, String pickupPlace) {
+        Long me = BaseContext.getCurrentId();
+
+        // ① 查订单 + 不存在校验（复用公共逻辑）
+        TradeOrder order = getOrderOrThrow(orderId);
+
+        // ② 权限：只有买家本人（允许法：除了买家谁都不行）
+        if (!me.equals(order.getBuyerId())) {
+            throw new BaseException("只有买家可以填写交易地点");
+        }
+
+        // ③ 订单已结束就不能再改（待确认0 / 待交易1 之外都是终态）
+        boolean editable = OrderConstant.STATUS_PENDING_CONFIRM.equals(order.getStatus())
+                || OrderConstant.STATUS_PENDING_TRADE.equals(order.getStatus());
+        if (!editable) {
+            throw new BaseException("订单已结束，不能再修改交易地点");
+        }
+
+        // ④ 内容校验：非空 + 不超过数据库列长度
+        //    数据库里 pickup_place 是 varchar(255)，超长会直接抛 SQL 异常（提示很不友好），
+        //    所以在业务层先拦一道，给出可读的提示
+        if (pickupPlace == null || pickupPlace.trim().isEmpty()) {
+            throw new BaseException("交易地点不能为空");
+        }
+        String place = pickupPlace.trim();
+        if (place.length() > 255) {
+            throw new BaseException("交易地点太长了（最多 255 个字符）");
+        }
+
+        // ⑤ 落库（动态更新只会改传了的字段，不会动订单其它列）
+        tradeOrderMapper.update(TradeOrder.builder()
+                .id(orderId)
+                .pickupPlace(place)
+                .updateTime(LocalDateTime.now())
+                .build());
+
+        log.info("买家填写交易地点：orderId={}, 买家={}, 地点={}", orderId, me, place);
     }
 
     /**

@@ -37,7 +37,35 @@ DELETE FROM payment_record WHERE order_id IN (1, 2, 3);
 --   订单4、5 基线里是「已支付」，保留它们的 PAY 流水，只清退款/放款
 DELETE FROM payment_record WHERE pay_type IN (2, 3);
 
+-- ------------------------------------------------------------
+-- 清掉【历次回归新造的订单】（基线只有 1~5 这 5 条测试订单）
+-- 不清理会怎样：下单测试、议价成交每次都会新建订单，跑十几轮后表里堆一堆，
+-- 断言"最新一条"虽然还能过，但数据越来越乱、越来越难人工核对。
+-- ------------------------------------------------------------
+DELETE FROM payment_record WHERE order_id > 5;
+DELETE FROM trade_order WHERE id > 5;
+
+-- ------------------------------------------------------------
+-- 专供「下单 submit」回归用的两件商品
+-- 为什么要单独造：上面 5 件商品都被订单占用了，没法用来测"从零下一单"。
+-- 用固定 id（100/101），保证每次回归的数据一致、断言可预期。
+-- ------------------------------------------------------------
+DELETE FROM product WHERE id IN (100, 101);
+
+-- 商品100：在售 + 已过审（卖家=学姐2）
+--   用来测：不能买自己的商品 / 正常下单成功 / 下单后商品被锁住不能再买
+INSERT INTO product (id, seller_id, category_id, title, price, images, description,
+                     condition_level, is_flash_sale, audit_status, status, create_time, update_time)
+VALUES (100, 2, 1, '回归测试商品-可下单', 10.00, '["https://example.com/reg100.jpg"]',
+        '专供回归测试，请勿手工修改', 1, 0, 1, 0, NOW(), NOW());
+
+-- 商品101：未过审（audit_status=2 已驳回），用来测"未过审不能下单"
+INSERT INTO product (id, seller_id, category_id, title, price, images, description,
+                     condition_level, is_flash_sale, audit_status, audit_note, status, create_time, update_time)
+VALUES (101, 2, 1, '回归测试商品-未过审', 10.00, '["https://example.com/reg101.jpg"]',
+        '专供回归测试，请勿手工修改', 1, 0, 2, '回归测试用：模拟被驳回', 0, NOW(), NOW());
+
 -- 核对
 SELECT id, product_id, status AS 订单状态, pay_status, expire_time FROM trade_order ORDER BY id;
-SELECT id, status AS 商品状态 FROM product ORDER BY id;
+SELECT id, title, status AS 商品状态, audit_status AS 审核状态 FROM product ORDER BY id;
 SELECT id, order_no, LEFT(pay_no,3) AS 前缀, pay_type FROM payment_record ORDER BY id;

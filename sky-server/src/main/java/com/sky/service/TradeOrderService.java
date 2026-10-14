@@ -3,10 +3,14 @@ package com.sky.service;
 import com.sky.dto.TradeOrderPageQueryDTO;
 import com.sky.dto.TradeOrderCancelDTO;
 import com.sky.dto.TradeOrderSubmitDTO;
+import com.sky.entity.Product;
+import com.sky.entity.TradeOrder;
 import com.sky.result.PageResult;
 import com.sky.vo.TradeOrderPayVO;
 import com.sky.vo.TradeOrderSubmitVO;
 import com.sky.vo.TradeOrderVO;
+
+import java.math.BigDecimal;
 
 /**
  * 交易订单服务（校园二手）
@@ -60,5 +64,28 @@ public interface TradeOrderService {
     //超时关单
     void timeoutClose(Long orderId);
 
+    /**
+     * 议价成交后生成订单（供 BargainService 调用）
+     *
+     * 内部会锁定商品（在售 → 交易中），并写一条 order_source=议价生成(2) 的订单。
+     * 成交价由调用方传入（取议价金额，不接受前端传）。
+     * 交易地点先留空 —— 议价成交时买家还没填地点，之后可以在订单上补充。
+     *
+     * 为什么不在这里加 @Transactional：调用方 BargainService.accept() 已经开了事务，
+     * 本方法会加入同一个事务（Spring 默认传播行为 REQUIRED），
+     * 这样"生成订单"和"回填议价状态"才能一起成功、或一起失败。
+     */
+    TradeOrder createBargainOrder(Product product, Long buyerId, BigDecimal price);
+
+    /**
+     * 买家补充/修改交易地点
+     *
+     * 为什么需要它：议价成交生成的订单【交易地点是空的】——
+     * 议价流程里买家没有经过下单调 Deal 页面，没机会填地点（方案 A）。
+     * 所以需要一个"后补"的入口，否则双方不知道该去哪里面交。
+     *
+     * 规则：只有买家本人能改；订单未结束（待确认/待交易）才能改。
+     */
+    void updatePickupPlace(Long orderId, String pickupPlace);
 
 }

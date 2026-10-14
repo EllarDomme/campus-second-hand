@@ -118,7 +118,7 @@ Write-Head "② 订单模块回归（下单/支付/确认/拒单/收货/取消�
 if ($pyExe) {
     Invoke-ResetSql 'test-reset.sql' | Out-Null
     $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\order-flow-test.py') 2>&1
-    $out | Where-Object { $_ -match '^\s*(✅|❌|订单模块回归|RESULT|=====)' } | ForEach-Object { Write-Host "  $_" }
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|订单模块回归|RESULT|=====)' } | ForEach-Object { Write-Host "  $_" }
     $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
     if ($m.Success) {
         $passed += [int]$m.Groups[1].Value
@@ -134,7 +134,7 @@ Write-Head "③ 议价模块回归（发起出价 / 列表数据隔离）"
 if ($pyExe) {
     Invoke-ResetSql 'test-reset-bargain.sql' | Out-Null
     $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\bargain-test.py') 2>&1
-    $out | Where-Object { $_ -match '^\s*(✅|❌|议价模块回归|RESULT|=====)' } | ForEach-Object { Write-Host "  $_" }
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|议价模块回归|RESULT|=====)' } | ForEach-Object { Write-Host "  $_" }
     $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
     if ($m.Success) {
         $passed += [int]$m.Groups[1].Value

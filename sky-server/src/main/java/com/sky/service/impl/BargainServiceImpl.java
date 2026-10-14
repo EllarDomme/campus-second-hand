@@ -11,11 +11,13 @@ import com.sky.dto.BargainPageQueryDTO;
 import com.sky.dto.BargainSubmitDTO;
 import com.sky.entity.Bargain;
 import com.sky.entity.Product;
+import com.sky.entity.TradeOrder;
 import com.sky.exception.BaseException;
 import com.sky.mapper.BargainMapper;
 import com.sky.mapper.ProductMapper;
 import com.sky.result.PageResult;
 import com.sky.service.BargainService;
+import com.sky.service.TradeOrderService;
 import com.sky.vo.BargainVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,8 @@ public class BargainServiceImpl implements BargainService {
 
     @Autowired
     private ProductMapper productMapper;
+    @Autowired
+    private TradeOrderService tradeOrderService;
 
     /**
      * 买家发起议价
@@ -164,19 +168,181 @@ public class BargainServiceImpl implements BargainService {
 
     // ==================== 以下三个方法属于 S3-6b，下一轮再写 ====================
 
+    @Transactional
     @Override
     public void accept(Long id) {
-        throw new UnsupportedOperationException("S3-6b 待实现：接受报价 → 议价成交并生成订单");
+        Long me = BaseContext.getCurrentId();
+
+        Bargain bargain = bargainMapper.getById(id);
+        if(bargain == null){
+            throw new BaseException("议价记录不存在");
+        }
+
+        // ② 按状态判断"谁有权接受"（一律用「允许法」：只有该做的人能过）
+        //    文案也要跟着逻辑走：现在拦住的是"非卖家/非买家"，
+        //    所以提示语要写"只有XX可以…"，而不是"YY不能…"
+        //    （否则一个跟这笔议价无关的陌生人会收到"买家不能接受自己的出价"，莫名其妙）
+        if(BargainConstant.STATUS_BUYER_OFFER.equals(bargain.getBargainStatus())){
+            // 状态1：买家已出价 → 只有卖家能接受
+            if(!me.equals(bargain.getSellerId())){
+                throw new BaseException("只有卖家可以接受这个报价");
+            }
+        }else if(BargainConstant.STATUS_SELLER_COUNTER.equals(bargain.getBargainStatus())){
+            // 状态2：卖家已还价 → 只有买家能接受
+            if(!me.equals(bargain.getBuyerId())){
+                throw new BaseException("只有买家可以接受这个报价");
+            }
+        }else{
+            throw new BaseException("议价已结束，不能再操作");
+        }
+
+        // ③ 过期校验：到点了就不能再成交
+        //
+        // ⚠️ 这里有两个坑，之前都踩了：
+        //   ① 不要拿 orderId 判空！orderId 只有在"议价成交"之后才会被回填，
+        //      正常待处理的议价 orderId 本来就是 null —— 拿它当条件会导致【每一次接受都失败】。
+        //      要判空的是 expireTime（建表时是 DEFAULT NULL）。
+        //   ② 方向别写反：是"过期时间早于现在"才算过期。
+        //      now.isBefore(expireTime) 的意思是"还没到期"，拿它去抛"已过期"正好反了。
+        if (bargain.getExpireTime() == null
+                || bargain.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BaseException("议价已过期，请重新发起");
+        }
+
+        // ④ 查商品：议价期间可能已经被别人买走了（照抄）
+        Product product = productMapper.getById(bargain.getProductId());
+        if (product == null) {
+            throw new BaseException(MessageConstant.PRODUCT_NOT_FOUND);
+        }
+        if (!ProductConstant.ON_SALE.equals(product.getStatus())) {
+            throw new BaseException("商品已被别人买走或已下架，议价无法成交");
+        }
+
+        // ⑤ 成交价 = 最后一次报价（有卖家还价就用还价，否则用买家出价）
+        //    实体里已经给你写好了 currentOffer() 方法，直接用
+        BigDecimal dealPrice = bargain.currentOffer();
+
+        //调用订单模块生成订单
+        TradeOrder order = tradeOrderService.createBargainOrder(product,bargain.getBuyerId(),dealPrice);
+        
+        // ⑦ 回填议价：状态改"已接受" + 写下订单 id（照抄）
+        bargainMapper.update(Bargain.builder()
+                .id(bargain.getId())
+                .bargainStatus(BargainConstant.STATUS_ACCEPTED)
+                .orderId(order.getId())
+                .updateTime(LocalDateTime.now())
+                .build());
+
+        log.info("议价成交：bargainId={}, orderId={}, 成交价={}", bargain.getId(), order.getId(), dealPrice);
+
+
+
+
+
     }
 
+    // ==========================================================================
+    // 下面两个方法的"重复骨架"已搭好（查记录、写状态、打日志）
+    // 你只需写标注了【你的部分】的地方 —— 那才是各自不同的业务逻辑
+    // ==========================================================================
+
+    @Transactional
     @Override
     public void reject(Long id) {
-        throw new UnsupportedOperationException("S3-6b 待实现：拒绝报价");
+        Long me = BaseContext.getCurrentId();
+
+        // ① 查议价记录 + 不存在校验（和 accept 完全一样）
+        Bargain bargain = bargainMapper.getById(id);
+        if (bargain == null) {
+            throw new BaseException("议价记录不存在");
+        }
+
+        // ② 按状态判断"谁有权拒绝"（一律用「允许法」：只有该做的人能过）
+        //    状态 1（买家出价）→ 只有【卖家】能拒绝
+        //    状态 2（卖家还价）→ 只有【买家】能拒绝
+        //    其它状态（3已接受/4已拒绝/5已过期）→ "议价已结束，不能再操作"
+        if (BargainConstant.STATUS_BUYER_OFFER.equals(bargain.getBargainStatus())) {
+            if (!me.equals(bargain.getSellerId())) {
+                throw new BaseException("只有卖家可以拒绝这个报价");
+            }
+        } else if (BargainConstant.STATUS_SELLER_COUNTER.equals(bargain.getBargainStatus())) {
+            if (!me.equals(bargain.getBuyerId())) {
+                throw new BaseException("只有买家可以拒绝这个报价");
+            }
+        } else {
+            throw new BaseException("议价已结束，不能再操作");
+        }
+
+        // ③ 状态改成"已拒绝"（照抄：动态更新只会改传了的字段）
+        bargainMapper.update(Bargain.builder()
+                .id(bargain.getId())
+                .bargainStatus(BargainConstant.STATUS_REJECTED)
+                .updateTime(LocalDateTime.now())
+                .build());
+
+        log.info("议价被拒绝：bargainId={}, 操作人={}", bargain.getId(), me);
     }
 
+    @Transactional
     @Override
     public void counter(BargainCounterDTO counterDTO) {
-        throw new UnsupportedOperationException("S3-6b 待实现：卖家还价");
+        Long me = BaseContext.getCurrentId();
+
+        // ① 查议价记录 + 不存在校验（同上）
+        Bargain bargain = bargainMapper.getById(counterDTO.getId());
+        if (bargain == null) {
+            throw new BaseException("议价记录不存在");
+        }
+
+        // ② 只有【卖家】能还价（允许法：除了卖家谁都不行）
+        if(!me.equals(bargain.getSellerId())){
+            throw new BaseException("只有卖家可以还价");
+        }
+
+        // ③ 过期校验：议价过期后是「死状态」，不该再产生新动作
+        //    和 accept 保持一致。不加这一条的话会出现很别扭的状态：
+        //    卖家给一条已过期的议价还了价 → 议价"活"了过来（状态变成2），
+        //    但买家去接受时又会被过期校验拦住 —— 双方都不知道到底能不能成交。
+        if (bargain.getExpireTime() == null
+                || bargain.getExpireTime().isBefore(LocalDateTime.now())) {
+            throw new BaseException("议价已过期，请重新发起");
+        }
+
+        // ④ 只有状态 1（买家出价）能还价 —— 单轮制！
+        //    先单独判断"是不是已经还过价了"，这样文案更准确
+        if(BargainConstant.STATUS_SELLER_COUNTER.equals(bargain.getBargainStatus())){
+            throw new BaseException("卖家已还价，只能接受或拒绝");
+        }else if(!BargainConstant.STATUS_BUYER_OFFER.equals(bargain.getBargainStatus())){
+            throw new BaseException("议价已结束，不能再操作");
+        }
+
+        // ⑤ 还价金额校验（三段，和"发起议价"的判空套路一模一样）
+        //    非空              → "还价金额不能为空"
+        //    > 0               → "还价金额必须大于 0"
+        //    > 买家出价         → "还价必须高于买家的出价（否则你可以直接接受）"
+        //    提示：第三段用 counterDTO.getCounterOffer().compareTo(bargain.getBuyerOffer()) <= 0
+        //         （BigDecimal 比大小只能用 compareTo）
+        //    ← 你写
+        if(counterDTO.getCounterOffer() == null){
+            throw new BaseException("还价金额不能为空");
+        }
+        if(counterDTO.getCounterOffer().compareTo(BigDecimal.ZERO) <= 0){
+            throw new BaseException("还价金额必须大于 0");
+        }
+        if(counterDTO.getCounterOffer().compareTo(bargain.getBuyerOffer()) <= 0){
+            throw new BaseException("还价必须高于买家的出价（否则你可以直接接受）");
+        }
+
+        // ⑤ 写入还价 + 状态改成"卖家还价"（照抄）
+        bargainMapper.update(Bargain.builder()
+                .id(bargain.getId())
+                .sellerCounterOffer(counterDTO.getCounterOffer())
+                .bargainStatus(BargainConstant.STATUS_SELLER_COUNTER)
+                .updateTime(LocalDateTime.now())
+                .build());
+
+        log.info("卖家还价：bargainId={}, 买家出价={}, 还价={}",
+                bargain.getId(), bargain.getBuyerOffer(), counterDTO.getCounterOffer());
     }
 
 }
