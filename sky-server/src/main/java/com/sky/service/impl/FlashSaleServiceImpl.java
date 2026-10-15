@@ -207,6 +207,7 @@ public class FlashSaleServiceImpl implements FlashSaleService {
      */
     @Override
     public List<FlashSaleRecord> listMyRecord() {
+        log.info("你好呀后世的君子");
         return flashSaleRecordMapper.listMySuccess(BaseContext.getCurrentId());
     }
 
