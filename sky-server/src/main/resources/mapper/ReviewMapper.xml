@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ReviewMapper">
+
+    <sql id="baseColumns">
+        r.id,
+        r.order_id      orderId,
+        r.product_id    productId,
+        r.from_user_id  fromUserId,
+        r.to_user_id    toUserId,
+        r.star,
+        r.content,
+        r.is_default    isDefault,
+        r.create_time   createTime,
+        p.title         productTitle,
+        fu.nickname     fromNickname,
+        fu.avatar       fromAvatar,
+        tu.nickname     toNickname
+    </sql>
+
+    <sql id="baseJoins">
+        from review r
+        left join product p on r.product_id = p.id
+        left join user fu on r.from_user_id = fu.id
+        left join user tu on r.to_user_id = tu.id
+    </sql>
+
+    <!-- 商品详情页的评价列表：所有人都能看 -->
+    <select id="listByProduct" resultType="com.sky.vo.ReviewVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where r.product_id = #{productId}
+        order by r.id desc
+        limit 100
+    </select>
+
+    <!-- 某用户收到的评价（个人主页展示信誉） -->
+    <select id="listByToUser" resultType="com.sky.vo.ReviewVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where r.to_user_id = #{toUserId}
+        order by r.id desc
+        limit 100
+    </select>
+
+</mapper>

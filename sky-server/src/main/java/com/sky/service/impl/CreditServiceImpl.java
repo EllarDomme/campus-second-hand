@@ -1,0 +1,144 @@
+package com.sky.service.impl;
+
+import com.sky.constant.CreditConstant;
+import com.sky.context.BaseContext;
+import com.sky.entity.CreditLog;
+import com.sky.entity.User;
+import com.sky.exception.BaseException;
+import com.sky.mapper.CreditLogMapper;
+import com.sky.mapper.ReviewMapper;
+import com.sky.mapper.UserMapper;
+import com.sky.service.CreditService;
+import com.sky.vo.CreditVO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * 信用分服务实现
+ *
+ * ==========================================================================
+ * 【你的任务】把 changeCredit 的【填空 1~2】写完（这是全模块最核心的一段逻辑）：
+ *   填空 1 = 每日加分上限（加分才限，扣分不限）
+ *   填空 2 = 分数下限保护（不能扣成负数）
+ *
+ *   已替你写好（不用改）：myCredit / myLogs / 原子更新总分 + 写流水 的骨架
+ * ==========================================================================
+ */
+@Service
+@Slf4j
+public class CreditServiceImpl implements CreditService {
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private CreditLogMapper creditLogMapper;
+
+    @Autowired
+    private ReviewMapper reviewMapper;
+
+    /**
+     * 变更信用分（全项目唯一入口）
+     *
+     * 为什么必须"唯一入口"：如果允许别处直接 update user.credit_score，
+     * 流水（credit_log）和总分就会对不上 —— 而"每日加分上限"和"扣分溯源"
+     * 全都依赖流水，一旦对不上，规则就形同虚设。
+     */
+    @Transactional
+    @Override
+    public int changeCredit(Long userId, int changeScore, Integer reasonType, Long refId, String remark) {
+        if (userId == null || changeScore == 0) {
+            return 0;
+        }
+        String reason = CreditConstant.reasonName(reasonType);
+
+        // ================= 你的部分：填空 1 ~ 2 =================
+        //
+        // 【填空 1】加分才受"每日上限"约束（扣分不设限！）
+        //
+        //   if (changeScore > 0) {
+        //       LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        //       Integer todayAdded = creditLogMapper.sumAddedSince(userId, todayStart);
+        //       int remain = CreditConstant.DAILY_ADD_LIMIT
+        //                    - (todayAdded == null ? 0 : todayAdded);
+        //
+        //       if (remain <= 0) {
+        //           log.info("今日加分已达上限，本次不加分：userId={}, 今日已加={}", userId, todayAdded);
+        //           return 0;                       // ← 加满了，这次就不加了
+        //       }
+        //       if (changeScore > remain) {
+        //           changeScore = remain;           // ← 只加剩余额度，超出的部分作废
+        //       }
+        //   }
+        //   ⚠️ 注意 if 的范围：只有加分才走这段，扣分（负数）直接跳过。
+        //      写成 if (changeScore != 0) 就错了 —— 那会让恶意用户
+        //      "每天最多扣 10 分"，反而成了护身符。
+        //
+        // 【填空 2】分数下限保护 + 算出变更后的总分
+        //
+        //   User user = userMapper.getById(userId);
+        //   if (user == null) {
+        //       throw new BaseException("用户不存在");
+        //   }
+        //   int current = (user.getCreditScore() == null
+        //                  ? CreditConstant.INIT_SCORE : user.getCreditScore());
+        //
+        //   if (current + changeScore < CreditConstant.MIN_SCORE) {
+        //       changeScore = CreditConstant.MIN_SCORE - current;   // 最多扣到 0 分
+        //   }
+        //   if (changeScore == 0) {
+        //       return 0;                       // 已经是 0 分，扣不动了
+        //   }
+        //   int scoreAfter = current + changeScore;     // ← 这个变量下面要用
+        //
+        // =======================================================
+        //
+        // ---- 以下已写好：原子更新总分 + 写流水（等你的填空算好 changeScore 和 scoreAfter）----
+        // userMapper.addCreditScore(userId, changeScore);
+        // creditLogMapper.insert(CreditLog.builder()
+        //         .userId(userId)
+        //         .changeScore(changeScore)
+        //         .scoreAfter(scoreAfter)
+        //         .reasonType(reasonType)
+        //         .refId(refId)
+        //         .remark(remark == null ? reason : remark)
+        //         .createTime(LocalDateTime.now())
+        //         .updateTime(LocalDateTime.now())
+        //         .build());
+        // log.info("信用分变更：userId={}, {}{} 分 → {}（{}）",
+        //         userId, changeScore > 0 ? "+" : "", changeScore, scoreAfter, reason);
+        // return changeScore;
+        throw new UnsupportedOperationException("S3-10 待实现：changeCredit 的填空 1~2");
+    }
+
+    /** 我的信用分概览（已写好） */
+    @Override
+    public CreditVO myCredit() {
+        Long me = BaseContext.getCurrentId();
+        User user = userMapper.getById(me);
+        if (user == null) {
+            throw new BaseException("用户不存在");
+        }
+        Integer todayAdded = creditLogMapper.sumAddedSince(me, LocalDate.now().atStartOfDay());
+        return CreditVO.builder()
+                .creditScore(user.getCreditScore())
+                .todayAdded(todayAdded == null ? 0 : todayAdded)
+                .dailyAddLimit(CreditConstant.DAILY_ADD_LIMIT)
+                .goodReviewCount(reviewMapper.countByStarAtLeast(me, CreditConstant.GOOD_REVIEW_STAR))
+                .badReviewCount(reviewMapper.countByStarAtMost(me, CreditConstant.BAD_REVIEW_STAR))
+                .build();
+    }
+
+    /** 我的信用分流水（已写好） */
+    @Override
+    public List<CreditLog> myLogs() {
+        return creditLogMapper.listByUser(BaseContext.getCurrentId());
+    }
+
+}
