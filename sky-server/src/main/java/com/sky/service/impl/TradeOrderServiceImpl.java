@@ -5,6 +5,7 @@ import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
 import com.sky.constant.OrderConstant;
 import com.sky.constant.ProductConstant;
+import com.sky.constant.CreditConstant;
 import com.sky.context.BaseContext;
 import com.sky.dto.TradeOrderPageQueryDTO;
 import com.sky.dto.TradeOrderCancelDTO;
@@ -19,6 +20,7 @@ import com.sky.mapper.TradeOrderMapper;
 import com.sky.result.PageResult;
 import com.sky.service.TradeOrderService;
 import com.sky.service.DeliveryService;
+import com.sky.service.CreditService;
 import com.sky.utils.FlashSaleStockUtil;
 import com.sky.vo.TradeOrderPayVO;
 import com.sky.vo.TradeOrderSubmitVO;
@@ -93,6 +95,10 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     /** 跑腿单：下单时生成、主订单取消时联动取消（S3-9） */
     @Autowired
     private DeliveryService deliveryService;
+
+    /** 信用分：交易完成加分、超时爽约扣分（S3-10） */
+    @Autowired
+    private CreditService creditService;
 
     /**
      * 买家下单
@@ -778,6 +784,14 @@ public class TradeOrderServiceImpl implements TradeOrderService {
                 .build());
 
         log.info("买家确认收货：订单id={},买家={}",order.getId(),userId);
+
+        // 【S3-10 信用分联动】交易完成 → 买卖双方各 +2 分
+        // 为什么双方都加：交易是双方共同守约完成的，"完成交易"对两边都是正向行为。
+        // 每日加分上限、分数下限这些边界由 CreditService 内部兜住，这里不用管。
+        creditService.changeCredit(order.getBuyerId(), CreditConstant.SCORE_TRADE_DONE,
+                CreditConstant.REASON_TRADE_DONE, order.getId(), "订单交易完成");
+        creditService.changeCredit(order.getSellerId(), CreditConstant.SCORE_TRADE_DONE,
+                CreditConstant.REASON_TRADE_DONE, order.getId(), "订单交易完成");
     }
 
     /**
@@ -816,5 +830,21 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         log.info("超时关单：orderId={}，是否已支付={}",
                 order.getId(), OrderConstant.PAY_PAID.equals(order.getPayStatus()));
         doCancelOrder(order, "订单超时未处理，系统自动关闭", OrderConstant.STATUS_TIMEOUT_CANCELLED);
+
+        // 【S3-10 信用分联动】交易爽约 -5 分 —— 但"怪谁"要看付没付款：
+        //   · 未支付就超时 → 买家拍下不付款（占坑），扣买家
+        //   · 已支付却超时 → 钱都付了，是卖家一直不确认，扣卖家
+        // 放在 doCancelOrder 【之后】：关单失败（抛异常）时不该扣分，事务会一起回滚。
+        Long breachUserId;
+        String breachReason;
+        if (OrderConstant.PAY_PAID.equals(order.getPayStatus())) {
+            breachUserId = order.getSellerId();
+            breachReason = "卖家超时未确认订单";
+        } else {
+            breachUserId = order.getBuyerId();
+            breachReason = "买家超时未付款";
+        }
+        creditService.changeCredit(breachUserId, CreditConstant.SCORE_TRADE_BREACH,
+                CreditConstant.REASON_TRADE_BREACH, order.getId(), breachReason);
     }
 }
