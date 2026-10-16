@@ -18,6 +18,7 @@ import com.sky.mapper.ProductMapper;
 import com.sky.mapper.TradeOrderMapper;
 import com.sky.result.PageResult;
 import com.sky.service.TradeOrderService;
+import com.sky.service.DeliveryService;
 import com.sky.utils.FlashSaleStockUtil;
 import com.sky.vo.TradeOrderPayVO;
 import com.sky.vo.TradeOrderSubmitVO;
@@ -89,6 +90,10 @@ public class TradeOrderServiceImpl implements TradeOrderService {
     @Autowired
     private FlashSaleStockUtil flashSaleStockUtil;
 
+    /** 跑腿单：下单时生成、主订单取消时联动取消（S3-9） */
+    @Autowired
+    private DeliveryService deliveryService;
+
     /**
      * 买家下单
      *
@@ -116,6 +121,18 @@ public class TradeOrderServiceImpl implements TradeOrderService {
             throw new BaseException("不能购买自己发布的商品");
         }
 
+        // ---------- ①' 交易方式与跑腿必填项（便宜的先校验，别等订单建好了才发现地址没填）----------
+        Integer dealType = submitDTO.getDealType() == null
+                ? OrderConstant.DEAL_SELF_PICKUP : submitDTO.getDealType();
+        if (OrderConstant.DEAL_DELIVERY.equals(dealType)) {
+            if (submitDTO.getPickAddress() == null || submitDTO.getPickAddress().trim().isEmpty()) {
+                throw new BaseException("跑腿单必须填写取货地址");
+            }
+            if (submitDTO.getReceiveAddress() == null || submitDTO.getReceiveAddress().trim().isEmpty()) {
+                throw new BaseException("跑腿单必须填写收货地址");
+            }
+        }
+
         // ---------- ②③ 锁定商品 + 创建订单 ----------
         // 这两件事与"议价成交下单"完全一样，已抽成公共逻辑 createOrder（见下方同名方法）
         TradeOrder order = createOrder(
@@ -123,11 +140,17 @@ public class TradeOrderServiceImpl implements TradeOrderService {
                 buyerId,
                 product.getPrice(),          // 普通下单：成交价取商品标价
                 OrderConstant.SOURCE_NORMAL,
-                submitDTO.getDealType() == null
-                        ? OrderConstant.DEAL_SELF_PICKUP : submitDTO.getDealType(),
+                dealType,
                 OrderConstant.EXPIRE_MINUTES_NORMAL,   // 普通订单未支付超时 15 分钟
                 submitDTO.getPickupPlace(),
                 submitDTO.getRemark());
+
+        // ---------- ④ 走跑腿的话，同步生成跑腿单 ----------
+        // 跑腿费在 DeliveryService 里按"距离档位"算好并落库（计费快照），
+        // 前端只能传档位、传不了金额，防止白嫖跑腿。
+        if (OrderConstant.DEAL_DELIVERY.equals(order.getDealType())) {
+            deliveryService.createForTradeOrder(order, submitDTO);
+        }
 
         log.info("下单成功：orderNo={}, buyerId={}, productId={}, 金额={}",
                 order.getOrderNo(), buyerId, product.getId(), order.getRealPrice());
@@ -644,6 +667,11 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         if (OrderConstant.SOURCE_FLASH_SALE.equals(order.getOrderSource())) {
             flashSaleStockUtil.restore(order.getProductId());
         }
+
+        // ⑤ 跑腿单联动取消（这笔交易没走跑腿的话，内部会自己 return）
+        //    为什么必须联动：主订单都取消了，跑腿员还跑去取货就是白跑一趟。
+        //    已经送达的跑腿单不会被改（内部判断），保留跑腿员的劳动记录。
+        deliveryService.cancelByTradeOrder(order.getId(), reason);
     }
 
     /**
