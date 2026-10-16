@@ -18,6 +18,7 @@ import com.sky.mapper.ProductMapper;
 import com.sky.mapper.TradeOrderMapper;
 import com.sky.result.PageResult;
 import com.sky.service.TradeOrderService;
+import com.sky.utils.FlashSaleStockUtil;
 import com.sky.vo.TradeOrderPayVO;
 import com.sky.vo.TradeOrderSubmitVO;
 import com.sky.vo.TradeOrderVO;
@@ -83,6 +84,10 @@ public class TradeOrderServiceImpl implements TradeOrderService {
 
     @Autowired
     private PaymentRecordMapper paymentRecordMapper;
+
+    /** 捡漏单取消/超时后，要把 Redis 预扣的库存还回去（S3-7c） */
+    @Autowired
+    private FlashSaleStockUtil flashSaleStockUtil;
 
     /**
      * 买家下单
@@ -626,6 +631,18 @@ public class TradeOrderServiceImpl implements TradeOrderService {
                 ProductConstant.ON_SALE);
         if (back == 0) {
             throw new BaseException("商品状态异常，无法回退到在售");
+        }
+
+        // ④ 捡漏单：把 Redis 里预扣的库存还回去（S3-7c）
+        //
+        // ⚠️ 为什么必须做：Redis 不参与数据库事务，取消订单【不会自动】恢复它。
+        //    不做的后果：商品明明已回到"在售"，Redis 库存却还是 0
+        //    → 捡漏专区显示"抢购中"，一点却报"已经被抢光了" → 这件商品谁也拿不到。
+        //
+        // 为什么放在 ③ 之后：先确认商品真的回退成功了，再还名额；
+        // 顺序反过来的话，③ 失败抛异常时库存已经加回去，这个名额就凭空多出来了。
+        if (OrderConstant.SOURCE_FLASH_SALE.equals(order.getOrderSource())) {
+            flashSaleStockUtil.restore(order.getProductId());
         }
     }
 

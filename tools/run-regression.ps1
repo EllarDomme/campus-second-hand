@@ -194,7 +194,36 @@ SELECT CONCAT('  MySQL 商品2 状态   = ', status, '（1=交易中，说明已
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 8. 汇总 ----------
+# ---------- 8. 私信（含 WebSocket 实时推送）----------
+Write-Head "⑤ 私信（会话 / 消息 / 搜索 / WebSocket 实时推送）"
+if ($pyExe) {
+    Invoke-ResetSql 'test-reset-message.sql' | Out-Null
+
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\message-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|私信模块回归|RESULT|=====|会话id|学姐的 WebSocket)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "私信模块回归        : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+
+    if ($canReset) {
+        Write-Host "  --- 数据层核对 ---"
+        $sqlCheck = @"
+SELECT CONCAT('  会话数 = ', COUNT(*)) FROM $dbName.conversation;
+SELECT CONCAT('  消息数 = ', COUNT(*)) FROM $dbName.message;
+SELECT CONCAT('  未读消息数 = ', COUNT(*)) FROM $dbName.message WHERE is_read = 0;
+"@
+        & $mysqlExe "-h$dbHost" "-P$dbPort" "-u$dbUser" "-p$dbPass" -N -B -e $sqlCheck 2>&1 |
+            Where-Object { $_ -notmatch 'password on the command line' } | ForEach-Object { Write-Host $_ }
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 9. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''

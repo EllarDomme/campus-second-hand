@@ -35,6 +35,16 @@ public interface FlashSaleRecordMapper {
     int countSuccess(@Param("productId") Long productId, @Param("userId") Long userId);
 
     /**
+     * 查这个用户对这件商品的抢购成功记录（S3-8b 用：要拿到 orderId）
+     *
+     * 和 countSuccess 的区别：countSuccess 只回答"有没有"，这个方法要把记录本身取出来。
+     * limit 1 是防御性写法 —— 有唯一索引在，理论上最多一条。
+     */
+    @Select("select * from flash_sale_record where product_id = #{productId} " +
+            "and user_id = #{userId} and is_success = 1 limit 1")
+    FlashSaleRecord getSuccessRecord(@Param("productId") Long productId, @Param("userId") Long userId);
+
+    /**
      * 我的抢购记录（只返回抢到的，按时间倒序）
      */
     @Select("select * from flash_sale_record where user_id = #{userId} and is_success = 1 " +

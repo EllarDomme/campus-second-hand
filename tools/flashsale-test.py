@@ -177,6 +177,21 @@ check_true("T10", "抢到的人有一条商品2 的抢购记录",
 check_true("T11", "没抢到的人没有商品2 的抢购记录",
            not any(x.get("productId") == 2 for x in l_rec))
 
+# 五、S3-7c：捡漏订单取消后，Redis 库存要还回来
+#   不还的后果：商品回到"在售"，但 Redis 库存还是 0
+#              → 捡漏专区显示"抢购中"，一点却报"已经被抢光了"，商品谁也拿不到。
+print("\n===== 五、取消捡漏订单后库存恢复（3 项）=====")
+r = call("GET", "/user/order/page?page=1&pageSize=10&view=buyer", Hm)
+orders = [x for x in (r.get("data") or {}).get("records", [])
+          if x.get("orderSource") == 3 and x.get("productId") == 3]
+oid = orders[0]["id"] if orders else 0
+check("T12", "小明取消自己刚抢到的捡漏订单（商品3，订单id=%s）" % oid, "code=1",
+      call("PUT", "/user/order/cancel", Hm, {"id": oid, "reason": "测试：验证取消后库存恢复"}))
+check("T13", "小张抢商品3（库存应已随取消恢复 → 能抢到）", "code=1",
+      call("POST", "/user/flashSale/3", Hz))
+z_rec = call("GET", "/user/flashSale/record", {"authentication": zhang}).get("data") or []
+check_true("T14", "小张的抢购记录里出现了商品3", any(x.get("productId") == 3 for x in z_rec))
+
 total = passed + failed
 print("\n" + "=" * 60)
 print("捡漏抢购回归：通过 %d / %d" % (passed, total))

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.MessageMapper">
+
+    <!--
+        分页查聊天记录
+        按 id 倒序（消息只增不改，id 就是时间顺序，比 create_time 更可靠）
+        走 idx_conversation(conversation_id, id) 索引 —— 正好是这个查询的形状
+    -->
+    <select id="pageHistory" resultType="com.sky.vo.MessageVO">
+        select m.id,
+               m.conversation_id conversationId,
+               m.from_user_id    fromUserId,
+               m.content,
+               m.msg_type        msgType,
+               m.is_read         isRead,
+               m.create_time     createTime,
+               case when m.from_user_id = 0 then '系统消息' else u.nickname end fromNickname,
+               u.avatar          fromAvatar
+        from message m
+        left join user u on m.from_user_id = u.id
+        where m.conversation_id = #{conversationId}
+        order by m.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <!--
+        新功能 A：消息搜索（在【我参与的会话】里搜关键词）
+
+        三段结构，注意每段的作用不同：
+          · from message m —— 主角是消息
+          · join conversation c —— 【权限过滤】的唯一入口：
+                c.buyer_id = 我 or c.seller_id = 我
+            权限必须写在这里！漏了它就等于"全站聊天记录随便搜"。
+          · left join product / user —— 只是为了补展示信息（商品标题、对方昵称）
+            用 left join：商品可能被删、用户可能注销，但消息本身还是要展示出来
+    -->
+    <select id="searchMyMessages" resultType="com.sky.vo.MessageSearchVO">
+        select m.id,
+               m.conversation_id conversationId,
+               m.from_user_id    fromUserId,
+               m.content,
+               m.create_time     createTime,
+               p.title           productTitle,
+               fu.nickname       fromNickname,
+               u.nickname        otherNickname
+        from message m
+        join conversation c on m.conversation_id = c.id
+        left join product p on c.product_id = p.id
+        left join user u on u.id = if(c.buyer_id = #{userId}, c.seller_id, c.buyer_id)
+        left join user fu on m.from_user_id = fu.id
+        where (c.buyer_id = #{userId} or c.seller_id = #{userId})
+          and m.content like concat('%', #{keyword}, '%')
+        order by m.id desc
+        limit #{offset}, #{limit}
+    </select>
+
+    <!--
+        搜索总数
+        注意：这个查询【不需要】join product / user ——
+        那些表只是为了补展示字段，跟"有多少条"完全无关。
+        分页计数 join 一堆用不上的表，是常见的性能浪费（数据量大时很致命）。
+    -->
+    <select id="countMyMessages" resultType="int">
+        select count(*)
+        from message m
+        join conversation c on m.conversation_id = c.id
+        where (c.buyer_id = #{userId} or c.seller_id = #{userId})
+          and m.content like concat('%', #{keyword}, '%')
+    </select>
+
+</mapper>
