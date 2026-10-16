@@ -223,7 +223,35 @@ SELECT CONCAT('  未读消息数 = ', COUNT(*)) FROM $dbName.message WHERE is_re
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 9. 汇总 ----------
+# ---------- 9. 校园跑腿 ----------
+Write-Head "⑥ 校园跑腿（生成跑腿单 / 并发抢单 / 状态机 / 主订单联动）"
+if ($pyExe) {
+    Invoke-ResetSql 'test-reset-delivery.sql' | Out-Null
+
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\delivery-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|校园跑腿回归|RESULT|=====|成功：|失败：|交易订单id)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "校园跑腿回归        : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+
+    if ($canReset) {
+        Write-Host "  --- 数据层核对 ---"
+        $sqlCheck = @"
+SELECT CONCAT('  跑腿单状态分布: 待接单=', SUM(status=0), ' 已接单=', SUM(status=1), ' 取货中=', SUM(status=2), ' 已送达=', SUM(status=3), ' 已取消=', SUM(status=4)) FROM $dbName.delivery_order;
+SELECT CONCAT('  完成单的送达时间: ', IFNULL(MAX(finish_time), 'NULL')) FROM $dbName.delivery_order WHERE status = 3;
+"@
+        & $mysqlExe "-h$dbHost" "-P$dbPort" "-u$dbUser" "-p$dbPass" -N -B -e $sqlCheck 2>&1 |
+            Where-Object { $_ -notmatch 'password on the command line' } | ForEach-Object { Write-Host $_ }
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 10. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''
