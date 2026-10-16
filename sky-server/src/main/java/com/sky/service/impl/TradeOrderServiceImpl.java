@@ -44,7 +44,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * --------------------------------------------------------------------------
  * 把本类里的关键字【公共逻辑】拿去搜索，就能定位到全部：
  *
- *   【公共逻辑 · 取消订单】      doCancelOrder(order, reason, cancelStatus)
+ *   【公共逻辑 · 取消订单】      doCancelOrder(order, reason, cancelStatus, strictProductRollback)
  *        被 3 处复用：卖家拒单 reject ／ 双方取消 cancel ／ 超时关单 timeoutClose
  *        它内部会自己判断"已支付就退款"，所以三种场景的调用方式完全一样，
  *        差别只有两个参数：原因文案、终态用 3（已取消）还是 4（超时取消）
@@ -616,8 +616,17 @@ public class TradeOrderServiceImpl implements TradeOrderService {
      *   ① 已支付 → 写一条退款流水
      *   ② 订单   → 已取消 + 原因（只有真付过钱才标"已退款"）
      *   ③ 商品   → 从"交易中"回退"在售"（条件更新 + 判影响行数）
+     *
+     * @param strictProductRollback 商品回退失败时要不要整笔回滚。两条路径的答案不同：
+     *        · true（手动拒单/取消）：用户在旁边，看到提示可以重试；
+     *          宁可这次不成功，也不要"订单关了但商品没回售"的数据不一致
+     *        · false（定时超时关单）：没人守着！
+     *          如果也整笔回滚，订单状态还是 0 → 下一分钟定时任务又扫到它 → 又失败
+     *          → **订单永远关不掉，还每分钟刷一条 ERROR 日志**（真实踩过）
+     *          所以这里只记警告，订单照常关闭；商品状态异常交给人工/管理端处理
      */
-    private void doCancelOrder(TradeOrder order, String reason, Integer cancelStatus) {
+    private void doCancelOrder(TradeOrder order, String reason, Integer cancelStatus,
+                               boolean strictProductRollback) {
         boolean paid = OrderConstant.PAY_PAID.equals(order.getPayStatus());
 
         // ① 已支付 → 写退款流水
@@ -659,7 +668,12 @@ public class TradeOrderServiceImpl implements TradeOrderService {
                 ProductConstant.IN_TRADE,
                 ProductConstant.ON_SALE);
         if (back == 0) {
-            throw new BaseException("商品状态异常，无法回退到在售");
+            // 见方法注释里的 @param 说明：手动路径要回滚，定时任务路径只记警告
+            if (strictProductRollback) {
+                throw new BaseException("商品状态异常，无法回退到在售");
+            }
+            log.warn("商品状态异常，无法回退到在售（订单仍然关闭，商品需人工核对）：orderId={}, productId={}",
+                    order.getId(), order.getProductId());
         }
 
         // ④ 捡漏单：把 Redis 里预扣的库存还回去（S3-7c）
@@ -699,7 +713,7 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         checkReason(cancelDTO.getReason(), "拒单");
 
         // 拒单/取消 → 终态是"已取消"(3)
-        doCancelOrder(order, cancelDTO.getReason(), OrderConstant.STATUS_CANCELLED);
+        doCancelOrder(order, cancelDTO.getReason(), OrderConstant.STATUS_CANCELLED, true);
         log.info("卖家拒单成功：订单id={}，卖家id={}，是否退款={}",
                 order.getId(), order.getSellerId(), OrderConstant.PAY_PAID.equals(order.getPayStatus()));
     }
@@ -726,7 +740,7 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         checkReason(cancelDTO.getReason(), "取消");
 
         // 拒单/取消 → 终态是"已取消"(3)
-        doCancelOrder(order, cancelDTO.getReason(), OrderConstant.STATUS_CANCELLED);
+        doCancelOrder(order, cancelDTO.getReason(), OrderConstant.STATUS_CANCELLED, true);
         log.info("订单已取消：订单id={}，操作人={}，是否退款={}",
                 order.getId(), me, OrderConstant.PAY_PAID.equals(order.getPayStatus()));
     }
@@ -829,7 +843,7 @@ public class TradeOrderServiceImpl implements TradeOrderService {
         //    终态传"超时取消(4)"而不是"已取消(3)"，因为这是超时关单，语义不同。
         log.info("超时关单：orderId={}，是否已支付={}",
                 order.getId(), OrderConstant.PAY_PAID.equals(order.getPayStatus()));
-        doCancelOrder(order, "订单超时未处理，系统自动关闭", OrderConstant.STATUS_TIMEOUT_CANCELLED);
+        doCancelOrder(order, "订单超时未处理，系统自动关闭", OrderConstant.STATUS_TIMEOUT_CANCELLED, false);
 
         // 【S3-10 信用分联动】交易爽约 -5 分 —— 但"怪谁"要看付没付款：
         //   · 未支付就超时 → 买家拍下不付款（占坑），扣买家

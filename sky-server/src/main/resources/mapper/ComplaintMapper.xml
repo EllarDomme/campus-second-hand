@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.sky.mapper.ComplaintMapper">
+
+    <!-- 工单的公共列：工单只存"谁投诉谁 + 内容 + 处理结果"，商品和订单信息关联出来 -->
+    <sql id="baseColumns">
+        c.id,
+        c.complaint_type        complaintType,
+        c.product_id            productId,
+        c.order_id              orderId,
+        c.complainant_user_id   complainantUserId,
+        c.respondent_user_id    respondentUserId,
+        c.complaint_reason      complaintReason,
+        c.content,
+        c.images,
+        c.handle_status         handleStatus,
+        c.handle_result         handleResult,
+        c.handle_note           handleNote,
+        c.create_time           createTime,
+        c.update_time           updateTime,
+        p.title                 productTitle,
+        o.order_no              orderNo,
+        cu.nickname             complainantNickname,
+        ru.nickname             respondentNickname
+    </sql>
+
+    <sql id="baseJoins">
+        from complaint c
+        left join product p on c.product_id = p.id
+        left join trade_order o on c.order_id = o.id
+        left join user cu on c.complainant_user_id = cu.id
+        left join user ru on c.respondent_user_id = ru.id
+    </sql>
+
+    <!-- 我的投诉记录：能看到处理进度 -->
+    <select id="listMine" resultType="com.sky.vo.ComplaintVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where c.complainant_user_id = #{complainantUserId}
+        order by c.id desc
+        limit 100
+    </select>
+
+    <select id="getDetailById" resultType="com.sky.vo.ComplaintVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where c.id = #{id}
+    </select>
+
+    <!--
+        管理端工单列表
+        筛选条件都可空（不传就是"全部"）；
+        排序：先看"待处理"（管理员最该先干这个），同状态按提交时间【正序】——
+        老的工单先处理（不然用户会觉得没人管）。
+        分页由 PageHelper 接管（这是项目里管理端列表的统一做法）。
+    -->
+    <select id="listForAdmin" resultType="com.sky.vo.ComplaintVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        <where>
+            <if test="handleStatus != null">
+                and c.handle_status = #{handleStatus}
+            </if>
+            <if test="complaintType != null">
+                and c.complaint_type = #{complaintType}
+            </if>
+        </where>
+        order by c.handle_status asc, c.id asc
+    </select>
+
+</mapper>

@@ -280,7 +280,37 @@ SELECT CONCAT('  ', u.nickname, ' 信用分=', u.credit_score) FROM $dbName.user
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 11. 汇总 ----------
+# ---------- 11. 投诉工单 ----------
+Write-Head "⑧ 投诉工单（商品举报 / 交易纠纷 / 管理端裁决 / 信用分处罚只扣一次）"
+if ($pyExe) {
+    Invoke-ResetSql 'test-reset-complaint.sql' | Out-Null
+
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\complaint-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|投诉工单回归|RESULT|=====|      商品举报工单id|      交易纠纷工单id)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "投诉工单回归        : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+
+    if ($canReset) {
+        Write-Host "  --- 数据层核对 ---"
+        $sqlCheck = @"
+SELECT CONCAT('  工单数 = ', COUNT(*), '（待处理=', SUM(handle_status=0), ' 已完结=', SUM(handle_status=2), '）') FROM $dbName.complaint;
+SELECT CONCAT('  已完结工单: 成立=', SUM(handle_result=1), ' 不成立=', SUM(handle_result=2)) FROM $dbName.complaint WHERE handle_status = 2;
+SELECT CONCAT('  投诉导致的信用分流水 = ', COUNT(*), ' 条') FROM $dbName.credit_log WHERE reason_type = 6;
+SELECT CONCAT('  ', u.nickname, ' 信用分=', u.credit_score) FROM $dbName.user u WHERE u.id IN (1,2,3) ORDER BY u.id;
+"@
+        & $mysqlExe "-h$dbHost" "-P$dbPort" "-u$dbUser" "-p$dbPass" -N -B -e $sqlCheck 2>&1 |
+            Where-Object { $_ -notmatch 'password on the command line' } | ForEach-Object { Write-Host $_ }
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 12. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''

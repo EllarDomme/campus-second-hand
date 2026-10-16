@@ -276,6 +276,10 @@ CREATE TABLE `complaint` (
   `content` text NOT NULL COMMENT '投诉内容',
   `images` varchar(1000) DEFAULT NULL COMMENT '凭证图片url，JSON数组',
   `handle_status` tinyint NOT NULL DEFAULT 0 COMMENT '处理状态：0待处理 1处理中 2已完结',
+  -- S3-10b 补的字段：原设计只有 handle_status + handle_note，
+  -- 但"投诉是否成立"是核心业务状态（决定扣不扣信用分、也决定统计口径），
+  -- 塞进备注里就永远算不出"本月投诉成立率"。属于数据库评审报告里那类"落地才发现的缺口"。
+  `handle_result` tinyint DEFAULT NULL COMMENT '处理结果：1投诉成立 2投诉不成立，NULL=未处理',
   `handle_note` varchar(500) DEFAULT NULL COMMENT '管理员处理备注',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
