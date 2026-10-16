@@ -79,6 +79,22 @@ public class CreditServiceImpl implements CreditService {
         //   ⚠️ 注意 if 的范围：只有加分才走这段，扣分（负数）直接跳过。
         //      写成 if (changeScore != 0) 就错了 —— 那会让恶意用户
         //      "每天最多扣 10 分"，反而成了护身符。
+        if(changeScore > 0){
+            LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+            Integer todayAdded = creditLogMapper.sumAddedSince(userId,todayStart);
+            int remain = CreditConstant.DAILY_ADD_LIMIT - (todayAdded == null ? 0 : todayAdded);
+
+            if(remain <= 0){
+                log.info("今日加分已经达到上限，本次不加分：userId={},今日已加={}",userId,todayAdded);
+                return 0;
+            }
+
+            //如果超过了剩余可以加的分数，那就只加剩余可以加的分数
+            if(changeScore > remain){
+                changeScore = remain;
+            }
+        }
+
         //
         // 【填空 2】分数下限保护 + 算出变更后的总分
         //
@@ -96,25 +112,41 @@ public class CreditServiceImpl implements CreditService {
         //       return 0;                       // 已经是 0 分，扣不动了
         //   }
         //   int scoreAfter = current + changeScore;     // ← 这个变量下面要用
-        //
+        User user = userMapper.getById(userId);
+        if(user == null){
+            throw new BaseException("用户不存在");
+        }
+
+        int current = (user.getCreditScore() == null ? CreditConstant.INIT_SCORE : user.getCreditScore());
+
+        if(current + changeScore < CreditConstant.MIN_SCORE){
+            changeScore = CreditConstant.MIN_SCORE - current;
+        }
+        if(changeScore == 0){
+            return 0; // 已经是0分了，已经扣不动了
+        }
+
+
+        int scoreAfter = current + changeScore;
+
+
         // =======================================================
         //
         // ---- 以下已写好：原子更新总分 + 写流水（等你的填空算好 changeScore 和 scoreAfter）----
-        // userMapper.addCreditScore(userId, changeScore);
-        // creditLogMapper.insert(CreditLog.builder()
-        //         .userId(userId)
-        //         .changeScore(changeScore)
-        //         .scoreAfter(scoreAfter)
-        //         .reasonType(reasonType)
-        //         .refId(refId)
-        //         .remark(remark == null ? reason : remark)
-        //         .createTime(LocalDateTime.now())
-        //         .updateTime(LocalDateTime.now())
-        //         .build());
-        // log.info("信用分变更：userId={}, {}{} 分 → {}（{}）",
-        //         userId, changeScore > 0 ? "+" : "", changeScore, scoreAfter, reason);
-        // return changeScore;
-        throw new UnsupportedOperationException("S3-10 待实现：changeCredit 的填空 1~2");
+         userMapper.addCreditScore(userId, changeScore);
+         creditLogMapper.insert(CreditLog.builder()
+                 .userId(userId)
+                 .changeScore(changeScore)
+                 .scoreAfter(scoreAfter)
+                 .reasonType(reasonType)
+                 .refId(refId)
+                 .remark(remark == null ? reason : remark)
+                 .createTime(LocalDateTime.now())
+                 .updateTime(LocalDateTime.now())
+                 .build());
+         log.info("信用分变更：userId={}, {}{} 分 → {}（{}）",
+                 userId, changeScore > 0 ? "+" : "", changeScore, scoreAfter, reason);
+         return changeScore;
     }
 
     /** 我的信用分概览（已写好） */

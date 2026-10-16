@@ -1,6 +1,7 @@
 package com.sky.service.impl;
 
 import com.sky.constant.CreditConstant;
+import com.sky.constant.OrderConstant;
 import com.sky.context.BaseContext;
 import com.sky.dto.ReviewSubmitDTO;
 import com.sky.entity.Review;
@@ -61,7 +62,34 @@ public class ReviewServiceImpl implements ReviewService {
         //   · star == null 或 star < 1 或 star > 5    → "星级必须在 1~5 之间"
         //   · content 不为 null 且 trim 后长度 > MAX_CONTENT_LENGTH → "评价太长了（最多 500 字）"
         //   （content 允许为空 —— 只打星不写字是正常的）
-        //
+        if(submitDTO.getOrderId() == null){
+            throw new BaseException("订单id不能为空");
+        }
+        if(submitDTO.getStar() == null || submitDTO.getStar() < 1 || submitDTO.getStar() > 5){
+            throw new BaseException("星级必须在 1~5 之间");
+        }
+        // ┌── 【错题标记 #20】判空写成了"或"，把合法输入给拒了 ──────────────
+        // │ 你当时写的：if (content == null || content.trim().length() > 500) throw "评价太长了（最多5000字）"
+        // │
+        // │ 错在哪（两个问题）：
+        // │   ① 条件方向：评价文字是【允许为空】的（只打星不写字很正常）。
+        // │      按你这个写法，content == null 也会进这个分支 ——
+        // │      结果是"凡是没写字的评价一律被拒"，而且提示还说"太长了"，让人一头雾水。
+        // │      正确条件是"不为 null 【且】超长"，两个条件用 && 连接。
+        // │   ② 文案：上限是 500（数据库 varchar(500)），你写成了 5000，
+        // │      用户按提示写到 3000 字还是被拒，会觉得系统在骗他。
+        // │      建议：直接引用常量拼字符串，改上限时文案自动跟着变。
+        // │
+        // │ 记法：判空和范围校验连用时，先问一句"空值本身算不算违规"。
+        // │      允许为空 → 用 != null 短路放行；不允许为空 → 单独一段判空，
+        // │      别把两件事混在一个条件里。
+        // └──────────────────────────────────────────────────────────────
+        if (submitDTO.getContent() != null
+                && submitDTO.getContent().trim().length() > MAX_CONTENT_LENGTH) {
+            throw new BaseException("评价太长了（最多 " + MAX_CONTENT_LENGTH + " 字）");
+        }
+
+
         // 【填空 2】订单校验（四个守卫）
         //   TradeOrder order = tradeOrderMapper.getById(submitDTO.getOrderId());
         //   · order == null                          → "订单不存在"
@@ -70,14 +98,25 @@ public class ReviewServiceImpl implements ReviewService {
         //                                            → "只有已完成的订单才能评价"
         //   ⚠️ 第四个守卫就是本模块的"业务边界"：没成交就评价 = 刷信誉。
         //      常量是 OrderConstant.STATUS_COMPLETED（已完成=2），记得 import。
-        //
+        TradeOrder tradeOrder = tradeOrderMapper.getById(submitDTO.getOrderId());
+        if(tradeOrder == null){
+            throw new BaseException("订单不存在");
+        }
+        if(!me.equals(tradeOrder.getBuyerId()) && !me.equals(tradeOrder.getSellerId())){
+            throw new BaseException("无权评价该订单");
+        }
+        if(!OrderConstant.STATUS_COMPLETED.equals(tradeOrder.getStatus())){
+            throw new BaseException("只有完成了的订单才能够评价");
+        }
         // 【填空 3】确定"被评价人"：我是买家就评卖家，我是卖家就评买家
         //   Long toUserId = me.equals(order.getBuyerId()) ? order.getSellerId() : order.getBuyerId();
         //   （绝对不能让前端传 toUserId —— 否则可以伪造"我给任意人打差评"）
-        //
+        Long toUserId = me.equals(tradeOrder.getBuyerId()) ? tradeOrder.getSellerId() : tradeOrder.getBuyerId();
         // 【填空 4】查重：我有没有评过这笔订单
         //   · reviewMapper.getByOrderAndFrom(orderId, me) != null → "你已经评价过这笔订单了"
-        //
+        if(reviewMapper.getByOrderAndFrom(tradeOrder.getId(),me) != null){
+            throw new BaseException("你已经评价过这笔订单了");
+        };
         // 【填空 5】落库
         //   ⚠️ 并发下（同一个人连点两次）会撞唯一索引 uk_order_from，
         //      要 try { insert } catch (DuplicateKeyException e) { throw new BaseException("你已经评价过这笔订单了"); }
@@ -89,7 +128,34 @@ public class ReviewServiceImpl implements ReviewService {
         //       star / content（content 为 null 就存 null，别存空字符串）
         //       isDefault = 0                          ← 用户提交的一律是真实评价
         //       createTime / updateTime = now
-        //
+        Review review = Review.builder()
+                .orderId(tradeOrder.getId())
+                .productId(tradeOrder.getProductId())
+                .fromUserId(me)
+                .toUserId(toUserId)
+                .star(submitDTO.getStar())
+                .content(submitDTO.getContent())
+                .isDefault(0)
+                .createTime(LocalDateTime.now())
+                .updateTime(LocalDateTime.now())
+                .build();
+
+        // ┌── 【错题标记 #21】漏了并发兜底（唯一索引冲突没接住）──────────────
+        // │ 你当时写的：直接 reviewMapper.insert(review);
+        // │ 为什么错：两个请求（比如用户连点两次"提交评价"）会同时通过【填空 4】的查重，
+        // │   然后都去 insert → 第二个撞唯一索引 uk_order_from →
+        // │   抛 DuplicateKeyException → 用户看到一个数据库异常 500，
+        // │   但他其实什么都没做错（只是手快）。
+        // │ 正确做法：catch 住它，翻译成业务提示"你已经评价过这笔订单了"。
+        // │ 这已经是本项目第 N 次用这个套路了（收藏、支付幂等、建会话、抢购…）：
+        // │   查重负责"友好提示"，唯一索引负责"并发兜底"，兜底触发时【优雅降级】。
+        // └──────────────────────────────────────────────────────────────
+        try {
+            reviewMapper.insert(review);
+        } catch (DuplicateKeyException e) {
+            throw new BaseException("你已经评价过这笔订单了");
+        }
+
         // 【填空 6】信用分联动（⭐ 这就是"信用分"和"评价"的接缝）
         //   · star >= CreditConstant.GOOD_REVIEW_STAR(4)  → 加 CreditConstant.SCORE_GOOD_REVIEW(+1)
         //   · star <= CreditConstant.BAD_REVIEW_STAR(2)   → 加 CreditConstant.SCORE_BAD_REVIEW(-2)
@@ -100,7 +166,13 @@ public class ReviewServiceImpl implements ReviewService {
         //   提示：写成一个 if / else if，不要用三元表达式堆在一起
         //
         // =======================================================
-        throw new UnsupportedOperationException("S3-10 待实现：submit 的填空 1~6");
+        if(review.getStar() >= CreditConstant.GOOD_REVIEW_STAR){
+            creditService.changeCredit(toUserId,CreditConstant.SCORE_GOOD_REVIEW,CreditConstant.REASON_GOOD_REVIEW,tradeOrder.getId(),"订单评价" + "评分:" + review.getStar() + "星");
+        }
+        else if(review.getStar() <= CreditConstant.BAD_REVIEW_STAR){
+            creditService.changeCredit(toUserId,CreditConstant.SCORE_BAD_REVIEW,CreditConstant.REASON_BAD_REVIEW,tradeOrder.getId(),"订单评价" + "评分:" + review.getStar() + "星");
+        }
+
     }
 
     /** 某商品的评价列表（已写好） */

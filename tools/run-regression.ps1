@@ -251,7 +251,36 @@ SELECT CONCAT('  完成单的送达时间: ', IFNULL(MAX(finish_time), 'NULL')) 
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 10. 汇总 ----------
+# ---------- 10. 评价 + 信用分 ----------
+Write-Head "⑦ 评价 + 信用分（一单一评 / 好评差评联动 / 每日加分上限 / 超时爽约扣分）"
+if ($pyExe) {
+    Invoke-ResetSql 'test-reset-credit.sql' | Out-Null
+
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\credit-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|评价\+信用分回归|RESULT|=====|      第|  订单912)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "评价+信用分回归     : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+
+    if ($canReset) {
+        Write-Host "  --- 数据层核对 ---"
+        $sqlCheck = @"
+SELECT CONCAT('  评价数 = ', COUNT(*)) FROM $dbName.review;
+SELECT CONCAT('  信用分流水 = ', COUNT(*), ' 条') FROM $dbName.credit_log;
+SELECT CONCAT('  ', u.nickname, ' 信用分=', u.credit_score) FROM $dbName.user u WHERE u.id IN (1,2,3) ORDER BY u.id;
+"@
+        & $mysqlExe "-h$dbHost" "-P$dbPort" "-u$dbUser" "-p$dbPass" -N -B -e $sqlCheck 2>&1 |
+            Where-Object { $_ -notmatch 'password on the command line' } | ForEach-Object { Write-Host $_ }
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 11. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''
