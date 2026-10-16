@@ -20,10 +20,15 @@ public class DeliveryConstant {
     public static final Integer STATUS_FINISHED = 3;
     public static final Integer STATUS_CANCELLED = 4;
 
-    /** 跑腿员角色：user.role = 1 */
-    public static final Integer ROLE_RUNNER = 1;
-    /** 用户状态正常：user.status = 0 */
-    public static final Integer USER_STATUS_NORMAL = 0;
+    // 注意：跑腿员角色和账号状态的定义已经收敛到 UserConstant
+    //（因为"封禁"现在是跨模块概念：拦截器、登录、跑腿抢单都要判，不该由跑腿模块定义）
+    // 这里保留两个别名，是为了兼容已有引用；新代码请直接用 UserConstant。
+    /** @deprecated 用 {@link UserConstant#ROLE_RUNNER} */
+    @Deprecated
+    public static final Integer ROLE_RUNNER = UserConstant.ROLE_RUNNER;
+    /** @deprecated 用 {@link UserConstant#STATUS_NORMAL} */
+    @Deprecated
+    public static final Integer USER_STATUS_NORMAL = UserConstant.STATUS_NORMAL;
 
     // ---------- 计价规则 ----------
     // 需求原文：3 公里内 5 元，每超 1 公里加 1 元

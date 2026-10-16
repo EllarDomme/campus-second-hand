@@ -2,6 +2,7 @@ package com.sky.service.impl;
 
 import com.sky.constant.DeliveryConstant;
 import com.sky.constant.OrderConstant;
+import com.sky.constant.UserConstant;
 import com.sky.context.BaseContext;
 import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.entity.DeliveryOrder;
@@ -70,10 +71,10 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (user == null) {
             throw new BaseException("用户不存在");
         }
-        if (!DeliveryConstant.ROLE_RUNNER.equals(user.getRole())) {
+        if (!UserConstant.ROLE_RUNNER.equals(user.getRole())) {
             throw new BaseException("只有跑腿员可以接单");
         }
-        if (!DeliveryConstant.USER_STATUS_NORMAL.equals(user.getStatus())) {
+        if (!UserConstant.STATUS_NORMAL.equals(user.getStatus())) {
             throw new BaseException("账号已被封禁，不能接单");
         }
 

@@ -1,12 +1,15 @@
 package com.sky.mapper;
 
+import com.sky.dto.UserPageQueryDTO;
 import com.sky.entity.User;
+import com.sky.vo.UserAdminVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Mapper
@@ -35,4 +38,21 @@ public interface UserMapper {
     @Update("update user set credit_score = credit_score + #{delta}, update_time = now() " +
             "where id = #{id}")
     int addCreditScore(@Param("id") Long id, @Param("delta") int delta);
+
+    // ==================== 管理端-用户管理（S4-1）====================
+
+    /** 管理端用户分页（带信用分与好评差评数，SQL 在 UserMapper.xml） */
+    List<UserAdminVO> listForAdmin(UserPageQueryDTO query);
+
+    /** 管理端看某个用户的详情（同上，按 id 查一条） */
+    UserAdminVO getAdminDetailById(Long id);
+
+    /**
+     * 封禁 / 解封
+     *
+     * 只改 status 一个字段，故意不做成通用的 update ——
+     * 管理员能改的只有"是否封禁"，不能顺手改别人的信用分/角色（那是别的流程的事）。
+     */
+    @Update("update user set status = #{status}, update_time = now() where id = #{id}")
+    int updateStatus(@Param("id") Long id, @Param("status") Integer status);
 }

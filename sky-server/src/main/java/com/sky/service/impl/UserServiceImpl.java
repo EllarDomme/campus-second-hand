@@ -3,9 +3,11 @@ package com.sky.service.impl;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.sky.constant.MessageConstant;
+import com.sky.constant.UserConstant;
 import lombok.extern.slf4j.Slf4j;
 import com.sky.dto.UserLoginDTO;
 import com.sky.entity.User;
+import com.sky.exception.BaseException;
 import com.sky.exception.LoginFailedException;
 import com.sky.mapper.UserMapper;
 import com.sky.properties.WeChatProperties;
@@ -35,6 +37,15 @@ public class UserServiceImpl implements UserService {
         //判断当前用户是否为新用户
         User user = userMapper.selectByOpenid(openid);
         if(user != null){
+            // 【S4-1】封禁校验：被封禁的账号不允许重新登录
+            //   双保险设计：拦截器管"手里已有的 token"，这里管"重新登录拿新 token"。
+            //   只做拦截器 → 他等 token 过期后重新登录又能用；
+            //   只做这里   → 他拿着封禁前签发的 token 还能继续用。
+            //   两边都做才堵得严。
+            if (UserConstant.STATUS_BANNED.equals(user.getStatus())) {
+                log.warn("已封禁用户尝试登录，已拒绝：userId={}, openid={}", user.getId(), openid);
+                throw new BaseException("账号已被封禁，如有疑问请联系平台管理员");
+            }
             return user;
         }
 

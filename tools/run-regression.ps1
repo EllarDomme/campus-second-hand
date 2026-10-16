@@ -310,7 +310,35 @@ SELECT CONCAT('  ', u.nickname, ' 信用分=', u.credit_score) FROM $dbName.user
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 12. 汇总 ----------
+# ---------- 12. 管理端：用户管理（S4-1）----------
+Write-Head "⑨ 管理端-用户管理（封禁执法：拦截器 + 登录双保险 / 解封立即生效）"
+if ($pyExe) {
+    Invoke-ResetSql 'test-reset-admin-user.sql' | Out-Null
+
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\admin-user-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|用户管理回归|RESULT|=====|【准备】)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "管理端-用户管理      : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+
+    if ($canReset) {
+        Write-Host "  --- 数据层核对 ---"
+        $sqlCheck = @"
+SELECT CONCAT('  用户总数 = ', COUNT(*), '（正常=', SUM(status=0), ' 封禁=', SUM(status=1), '）') FROM $dbName.user;
+SELECT CONCAT('  跑腿员 = ', SUM(role=1)) FROM $dbName.user;
+"@
+        & $mysqlExe "-h$dbHost" "-P$dbPort" "-u$dbUser" "-p$dbPass" -N -B -e $sqlCheck 2>&1 |
+            Where-Object { $_ -notmatch 'password on the command line' } | ForEach-Object { Write-Host $_ }
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 13. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''
