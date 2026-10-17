@@ -1,5 +1,6 @@
 package com.sky.service;
 
+import com.sky.dto.CreditAdjustDTO;
 import com.sky.dto.UserPageQueryDTO;
 import com.sky.result.PageResult;
 import com.sky.vo.UserAdminVO;
@@ -25,5 +26,20 @@ public interface AdminUserService {
      * @param status 0解封（恢复正常） 1封禁
      */
     void updateStatus(Long id, Integer status);
+
+    /**
+     * 【功能A】变更用户角色：普通用户 ↔ 跑腿员（跑腿员认证 / 取消资格）
+     *
+     * @param role 0普通用户 1跑腿员
+     */
+    void updateRole(Long id, Integer role);
+
+    /**
+     * 【功能B】管理员手动调整信用分
+     *
+     * 内部走 CreditService.changeCredit 这个唯一入口，所以每日加分上限、
+     * 分数下限这些边界都不用在这里重复实现。
+     */
+    void adjustCredit(CreditAdjustDTO adjustDTO);
 
 }

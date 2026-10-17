@@ -55,4 +55,11 @@ public interface UserMapper {
      */
     @Update("update user set status = #{status}, update_time = now() where id = #{id}")
     int updateStatus(@Param("id") Long id, @Param("status") Integer status);
+
+    /**
+     * 变更角色（普通用户 ↔ 跑腿员）
+     * 同样只改一个字段：管理员能做的就这两件事，不给"通用 update"的口子。
+     */
+    @Update("update user set role = #{role}, update_time = now() where id = #{id}")
+    int updateRole(@Param("id") Long id, @Param("role") Integer role);
 }

@@ -82,4 +82,15 @@ public interface DeliveryOrderMapper {
     /** 跑腿员收入统计（聚合查询，SQL 在 XML） */
     RunnerIncomeVO getIncome(Long runnerUserId);
 
+    /**
+     * 某个跑腿员手上【还没结束】的跑腿单数（S4-1 用）
+     *
+     * 用途：管理员要把跑腿员降级成普通用户之前，得先确认他手上没有进行中的单子 ——
+     * 否则单子没人送了，买家干等。这是"角色变更"必须有的业务守卫。
+     * 进行中 = 已接单(1) 或 取货中(2)。
+     */
+    @Select("select count(*) from delivery_order where runner_user_id = #{runnerUserId} " +
+            "and status in (1, 2)")
+    int countOngoingByRunner(Long runnerUserId);
+
 }
