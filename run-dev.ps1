@@ -22,6 +22,44 @@ if ($Rebuild) {
     if ($LASTEXITCODE -ne 0) { throw "编译失败" }
 }
 
+# ---------------------------------------------------------------------------
+# 启动前先清端口：8080 被占用时 Spring 会报 "Port 8080 was already in use" 然后退出，
+# 而最常见的原因就是【上一次的服务没关干净】（自己调试时也常中招）。
+# 这里先找出占用者，确认是 java 才杀，避免误杀别的程序。
+#
+# 为什么用 netstat 而不是 Get-NetTCPConnection：
+#   Get-NetTCPConnection 依赖 CIM 服务，在某些环境会返回空结果（实测踩过），
+#   而 netstat -ano 是系统自带、一定能拿到 PID。
+# ---------------------------------------------------------------------------
+$port = 8080
+function Get-PortOwnerPids([int]$p) {
+    $pids = @()
+    netstat -ano | Select-String ":$p\s" | ForEach-Object {
+        $parts = ($_.Line -replace '\s+', ' ').Trim() -split ' '
+        if ($parts.Length -ge 5 -and $parts[-2] -eq 'LISTENING') {
+            $v = 0
+            if ([int]::TryParse($parts[-1], [ref]$v)) { $pids += $v }
+        }
+    }
+    return ($pids | Select-Object -Unique)
+}
+
+foreach ($ownerPid in (Get-PortOwnerPids $port)) {
+    $p = Get-Process -Id $ownerPid -ErrorAction SilentlyContinue
+    if ($p -and $p.ProcessName -eq 'java') {
+        Write-Host "端口 $port 被上次残留的 java 进程占用（PID $($p.Id)），正在清理..." -ForegroundColor Yellow
+        Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Milliseconds 300
+            if (-not (Get-PortOwnerPids $port)) { break }
+        }
+    }
+    elseif ($p) {
+        Write-Host "端口 $port 被【$($p.ProcessName)】(PID $($p.Id)) 占用，不是本项目的进程，请手动处理。" -ForegroundColor Red
+        exit 1
+    }
+}
+
 if (-not (Test-Path -LiteralPath $cpFile)) {
     Write-Host 'classpath 缺失，正在生成...'
     & mvn -B -o -q -f (Join-Path $base 'campus-server\pom.xml') dependency:build-classpath `
