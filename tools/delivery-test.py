@@ -53,6 +53,14 @@ def login(openid):
     return r["data"]["token"]
 
 
+def login_admin():
+    r = call("POST", "/admin/employee/login", body={"username": "zhangsan", "password": "123456"})
+    if r.get("code") != 1:
+        print("❌ 管理端登录失败：%s" % r.get("msg"))
+        sys.exit(1)
+    return r["data"]["token"]
+
+
 def check(no, desc, expect, r):
     global passed, failed
     got = "code=%s msg=%s" % (r.get("code"), r.get("msg"))
@@ -186,6 +194,46 @@ check_true("T16", "赢家的收入统计：完成 ≥1 单、累计费用 ≥6 �
            (inc.get("finishedCount") or 0) >= 1 and float(inc.get("totalFee") or 0) >= 6.0,
            "（完成 %s 单，累计 %s 元，进行中 %s 单）"
            % (inc.get("finishedCount"), inc.get("totalFee"), inc.get("ongoingCount")))
+
+# ---------- 七、管理端：跑腿单管理（S4-4）----------
+print("\n===== 七、管理端-跑腿单管理（6 项）=====")
+admin = login_admin()
+Ha = {"token": admin}
+
+pg = call("GET", "/admin/delivery/page?page=1&pageSize=10", Ha).get("data") or {}
+check_true("T17", "管理端能分页查到跑腿单（全局视角）", (pg.get("total") or 0) >= 1,
+           "（total=%s）" % pg.get("total"))
+
+# 管理员看详情：不受"仅当事人"限制
+d = call("GET", "/admin/delivery/%s" % delivery_id, Ha)
+check_true("T18", "管理员能查看任意跑腿单详情（不受当事人限制）",
+           d.get("code") == 1 and (d.get("data") or {}).get("id") == delivery_id)
+
+# 原因必填
+check("T19", "强制取消时不填原因", "强制取消必须填写原因",
+      call("PUT", "/admin/delivery/cancel/%s?reason=%s" % (delivery_901, "%20%20"), Ha))
+
+# 对"待接单"的单子强制取消 → 应该成功
+# ⚠️ reason 是中文，必须 URL 转义（urllib 不接受 URL 里的非 ASCII，流程纪律第 2 条）
+check("T20", "对【待接单】的单子（901）强制取消", "code=1",
+      call("PUT", "/admin/delivery/cancel/%s?reason=%s"
+           % (delivery_901, urllib.parse.quote("跑腿员失联，管理员介入")), Ha))
+
+# ⭐ 再取消一次（已经取消了）→ 应该被拒（这就是你漏掉的那个守卫）
+check("T21", "对【已取消】的单子再次强制取消", "已取消",
+      call("PUT", "/admin/delivery/cancel/%s?reason=%s"
+           % (delivery_901, urllib.parse.quote("再取消一次")), Ha))
+
+# ⭐ 对"已送达"的单子强制取消 → 应该被拒（不能抹掉跑腿员的劳动记录）
+check("T22", "对【已送达】的单子强制取消", "已送达",
+      call("PUT", "/admin/delivery/cancel/%s?reason=%s"
+           % (delivery_id, urllib.parse.quote("想抹掉记录")), Ha))
+
+# 按状态筛选：status=4 应该全是已取消
+pg4 = call("GET", "/admin/delivery/page?status=4&page=1&pageSize=20", Ha).get("data") or {}
+recs4 = pg4.get("records") or []
+check_true("T23", "按 status=4 筛选 → 返回的全是已取消单", len(recs4) >= 1 and all(x.get("status") == 4 for x in recs4),
+           "（%d 条）" % len(recs4))
 
 total = passed + failed
 print("\n" + "=" * 60)

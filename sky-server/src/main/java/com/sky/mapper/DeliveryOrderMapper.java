@@ -1,5 +1,6 @@
 package com.sky.mapper;
 
+import com.sky.dto.DeliveryPageQueryDTO;
 import com.sky.entity.DeliveryOrder;
 import com.sky.vo.DeliveryOrderVO;
 import com.sky.vo.RunnerIncomeVO;
@@ -92,5 +93,14 @@ public interface DeliveryOrderMapper {
     @Select("select count(*) from delivery_order where runner_user_id = #{runnerUserId} " +
             "and status in (1, 2)")
     int countOngoingByRunner(Long runnerUserId);
+
+    /**
+     * 【管理端】跑腿单分页列表（S4-4）
+     *
+     * 和 listMyOrders 的区别：可以按状态/跑腿员/交易订单任意筛选。
+     * 管理员要的是"全局视角" —— 谁手上压着单子、哪些单子卡住了。
+     * SQL 在 DeliveryOrderMapper.xml，分页交给 PageHelper。
+     */
+    List<DeliveryOrderVO> listForAdmin(DeliveryPageQueryDTO query);
 
 }

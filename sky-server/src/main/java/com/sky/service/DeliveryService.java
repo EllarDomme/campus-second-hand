@@ -1,7 +1,9 @@
 package com.sky.service;
 
+import com.sky.dto.DeliveryPageQueryDTO;
 import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.entity.TradeOrder;
+import com.sky.result.PageResult;
 import com.sky.vo.DeliveryOrderVO;
 import com.sky.vo.RunnerIncomeVO;
 
@@ -68,5 +70,36 @@ public interface DeliveryService {
      * 已经送达（3）的不动 —— 人家确实送了，只是订单后来被取消/纠纷处理。
      */
     void cancelByTradeOrder(Long tradeOrderId, String reason);
+
+    // ==================== 管理端-跑腿单管理（S4-4）====================
+
+    /**
+     * 【管理端】跑腿单分页列表（可按状态/跑腿员/交易订单筛选）
+     *
+     * 为什么需要它：跑腿员视角的 /my 只能看自己的单子，
+     * 管理员需要全局视角 —— 谁手上压着单子、哪些单子卡住了。
+     */
+    PageResult pageForAdmin(DeliveryPageQueryDTO query);
+
+    /**
+     * 【管理端】跑腿单详情（不受"仅买卖双方+跑腿员"的限制）
+     *
+     * 用户端的 getDetail 会校验"你是不是当事人"，管理员当然不是当事人，
+     * 所以需要这个不校验权限的版本（管理端令牌本身就是权限凭证）。
+     */
+    DeliveryOrderVO getDetailForAdmin(Long id);
+
+    /**
+     * 【管理端】强制取消跑腿单
+     *
+     * 为什么需要它：现在跑腿单只有两条"退出路径"——
+     *   ① 跑腿员自己推进到已送达
+     *   ② 买家/卖家主动取消
+     * 如果跑腿员接单后失联，单子就卡死了，只能靠管理员介入。
+     *
+     * @param id     跑腿单id
+     * @param reason 强制取消的原因（必填，便于事后追溯）
+     */
+    void cancelByAdmin(Long id, String reason);
 
 }

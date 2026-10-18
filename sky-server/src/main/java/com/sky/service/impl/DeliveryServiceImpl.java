@@ -1,9 +1,12 @@
 package com.sky.service.impl;
 
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.sky.constant.DeliveryConstant;
 import com.sky.constant.OrderConstant;
 import com.sky.constant.UserConstant;
 import com.sky.context.BaseContext;
+import com.sky.dto.DeliveryPageQueryDTO;
 import com.sky.dto.TradeOrderSubmitDTO;
 import com.sky.entity.DeliveryOrder;
 import com.sky.entity.TradeOrder;
@@ -12,6 +15,7 @@ import com.sky.exception.BaseException;
 import com.sky.mapper.DeliveryOrderMapper;
 import com.sky.mapper.TradeOrderMapper;
 import com.sky.mapper.UserMapper;
+import com.sky.result.PageResult;
 import com.sky.service.DeliveryService;
 import com.sky.vo.DeliveryOrderVO;
 import com.sky.vo.RunnerIncomeVO;
@@ -323,6 +327,109 @@ public class DeliveryServiceImpl implements DeliveryService {
                 DeliveryConstant.STATUS_CANCELLED, null, LocalDateTime.now());
         log.info("主订单取消，联动取消跑腿单：deliveryId={}, rows={}, 原因={}",
                 delivery.getId(), rows, reason);
+    }
+
+    // ==========================================================================
+    // 管理端-跑腿单管理（S4-4）
+    //   pageForAdmin / getDetailForAdmin 已写好；cancelByAdmin 是【留给你的练习】
+    // ==========================================================================
+
+    /** 【管理端】跑腿单分页列表（已写好） */
+    @Override
+    public PageResult pageForAdmin(DeliveryPageQueryDTO query) {
+        int p = (query.getPage() == null || query.getPage() < 1) ? 1 : query.getPage();
+        int size = (query.getPageSize() == null || query.getPageSize() < 1) ? 10 : query.getPageSize();
+        PageHelper.startPage(p, size);
+        List<DeliveryOrderVO> list = deliveryOrderMapper.listForAdmin(query);
+        Page<DeliveryOrderVO> pageInfo = (Page<DeliveryOrderVO>) list;
+        return new PageResult(pageInfo.getTotal(), list);
+    }
+
+    /** 【管理端】跑腿单详情（已写好，不校验"当事人"） */
+    @Override
+    public DeliveryOrderVO getDetailForAdmin(Long id) {
+        DeliveryOrderVO vo = deliveryOrderMapper.getDetailById(id);
+        if (vo == null) {
+            throw new BaseException("跑腿单不存在");
+        }
+        return vo;
+    }
+
+    /**
+     * 【管理端】强制取消跑腿单
+     *
+     * 这是"运营兜底"能力：用户端那两条退出路径都走不通时（比如跑腿员失联），
+     * 只能由管理员人工介入。
+     */
+    @Override
+    public void cancelByAdmin(Long id, String reason) {
+        // ================= 你的部分：填空 A1 ~ A4 =================
+        //
+        // 【A1】原因必填
+        //   · reason 为 null 或 trim 后为空
+        //        → throw new BaseException("强制取消必须填写原因")
+        //   ⚠️ 为什么：管理员的强制操作是"权力的行使"，必须留下"为什么"，
+        //      否则事后没人说得清这单为什么被取消（用户来投诉时你就是举证方）。
+        if(reason == null || reason.trim().isEmpty()){
+            throw new BaseException("强制取消必须填写原因");
+        }
+        // 【A2】跑腿单必须存在
+        //   DeliveryOrder delivery = deliveryOrderMapper.getById(id);
+        //   · delivery == null → throw new BaseException("跑腿单不存在")
+        DeliveryOrder deliveryOrder = deliveryOrderMapper.getById(id);
+        if(deliveryOrder == null){
+            throw new BaseException("跑腿单不存在");
+        }
+        // 【A3】⭐ 状态校验：已经结束的单子不能动
+        //   ⚠️ 用常量在前 + equals，不要再写 ==（这个坑你已经踩了 5 次）
+        //   ⚠️ 为什么"已送达"也不能取消：人家确实把货送到了，
+        //      管理员取消它 = 抹掉跑腿员的劳动记录（钱和统计都会受影响）。
+        //      真要处理纠纷，应该走投诉工单，而不是把已完成的单子抹掉。
+        // ┌── 【错题标记 #30】只拦了"已送达"，漏了"已取消" ──────────────────
+        // │ 你当时写的：if (STATUS_FINISHED.equals(status)) throw "已经送达，不能取消";
+        // │ 漏了：状态 4（已取消）也要拦。
+        // │ 后果：对一张【已经取消过】的单子再点一次"强制取消"，
+        // │   条件更新 `where status = 4` 会匹配到它自己 →
+        // │   MySQL 默认返回的是"匹配行数"=1 → 接口报成功 ✓
+        // │   于是管理员会以为"操作生效了"，实际上什么都没发生。
+        // │   **这类"操作成功但没有任何效果"最容易让人误判。**
+        // │ 记法：状态机里的【终态】通常不止一个 —— 写"不能操作"的守卫时，
+        // │      把终态列全（这里是 3已送达 + 4已取消），别只想到最显眼的那个。
+        // └──────────────────────────────────────────────────────────────
+        if (DeliveryConstant.STATUS_FINISHED.equals(deliveryOrder.getStatus())) {
+            throw new BaseException("该跑腿单已送达，不能再取消");
+        }
+        if (DeliveryConstant.STATUS_CANCELLED.equals(deliveryOrder.getStatus())) {
+            throw new BaseException("该跑腿单已取消，不需要重复操作");
+        }
+        // 【A4】条件更新成"已取消" + 留痕
+        //   int rows = deliveryOrderMapper.updateStatusIfMatch(
+        //           id, delivery.getStatus(), DeliveryConstant.STATUS_CANCELLED,
+        //           null, LocalDateTime.now());
+        //   · rows == 0 → throw new BaseException("状态已变化，请刷新后重试")
+        //   log.warn("管理员强制取消跑腿单：deliveryId={}, 原状态={}, 跑腿员={}, 原因={}, 管理员={}",
+        //           id, delivery.getStatus(), delivery.getRunnerUserId(), reason,
+        //           BaseContext.getCurrentId());
+        //   ⚠️ 记得把【管理员自己的 id】也记进去 —— 强制操作必须能追到人。
+        int rows = deliveryOrderMapper.updateStatusIfMatch(
+                id,deliveryOrder.getStatus(),DeliveryConstant.STATUS_CANCELLED,
+                null,LocalDateTime.now());
+        if(rows == 0){
+            throw new BaseException("状态已变化，请刷新后重试");
+        }
+        // ┌── 【错题标记 #31】漏了留痕日志 ────────────────────────────────
+        // │ 你当时写的：条件更新完就结束了，没有任何日志。
+        // │ 为什么必须有：这是【管理员行使权力】的操作 ——
+        // │   事后用户来投诉"我的单子怎么没了"，平台要能拿出"谁、什么时候、
+        // │   因为什么取消的"。没有日志就没有举证能力。
+        // │   而且要把【管理员自己的 id】记进去（BaseContext.getCurrentId()），
+        // │   否则只能证明"有人取消了"，追不到人。
+        // │ 记法：凡是"绕过正常流程、由人手工干预"的操作，一律留痕：
+        // │      谁 + 对什么 + 原状态 → 新状态 + 为什么。
+        // └──────────────────────────────────────────────────────────────
+        log.warn("管理员强制取消跑腿单：deliveryId={}, 原状态={}, 跑腿员={}, 原因={}, 管理员={}",
+                id, deliveryOrder.getStatus(), deliveryOrder.getRunnerUserId(), reason,
+                BaseContext.getCurrentId());
     }
 
 }

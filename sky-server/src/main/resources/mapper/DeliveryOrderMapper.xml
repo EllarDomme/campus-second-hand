@@ -81,4 +81,28 @@
         where runner_user_id = #{runnerUserId}
     </select>
 
+    <!--
+        管理端-跑腿单分页列表（S4-4）
+        和"待接单大厅"的区别：这里不限制状态，管理员要看全部；
+        三个筛选条件都可空（不传就是不过滤）。
+        排序：先按状态（待接单/已接单/取货中 排在已结束前面），
+              同状态按 id 倒序（新的在前）—— 管理员最关心"还活着的单子"。
+    -->
+    <select id="listForAdmin" resultType="com.sky.vo.DeliveryOrderVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        <where>
+            <if test="status != null">
+                and d.status = #{status}
+            </if>
+            <if test="runnerUserId != null">
+                and d.runner_user_id = #{runnerUserId}
+            </if>
+            <if test="tradeOrderId != null">
+                and d.trade_order_id = #{tradeOrderId}
+            </if>
+        </where>
+        order by d.status asc, d.id desc
+    </select>
+
 </mapper>
