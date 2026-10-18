@@ -55,7 +55,7 @@ if (-not $pyExe) { Write-Host "❌ 找不到 Python" -ForegroundColor Red; exit 
 if ($pyExe.Count -gt 1) { $pyArgs = $pyExe[1..($pyExe.Count - 1)] } else { $pyArgs = @() }
 
 # ---------- 2. 数据库与 Redis 配置（从 gitignore 的 application-dev.yml 读）----------
-$yml = Join-Path $root 'sky-server\src\main\resources\application-dev.yml'
+$yml = Join-Path $root 'campus-server\src\main\resources\application-dev.yml'
 $dbHost = 'localhost'; $dbPort = '3306'; $dbName = 'campus_second_hand'; $dbUser = 'root'; $dbPass = ''
 if (Test-Path -LiteralPath $yml) {
     $raw = Get-Content -LiteralPath $yml -Raw
@@ -69,7 +69,7 @@ $mysqlExe = 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe'
 
 # ---------- 3. Mapper XML 结构体检（0.1 秒，比等启动失败快得多）----------
 # 因为 XML 写坏（注释里有 -- / select 没闭合）白折腾过两次，加个自检。
-$xmlDir = Join-Path $root 'sky-server\src\main\resources\mapper'
+$xmlDir = Join-Path $root 'campus-server\src\main\resources\mapper'
 $xmlBad = @()
 Get-ChildItem $xmlDir -Filter *.xml -ErrorAction SilentlyContinue | ForEach-Object {
     $text = Get-Content -LiteralPath $_.FullName -Raw
@@ -86,9 +86,9 @@ if ($xmlBad.Count -gt 0) {
 }
 
 # ---------- 4. 提醒：class 是否比源码旧（这是最容易踩的坑）----------
-$srcNewest = Get-ChildItem (Join-Path $root 'sky-server\src') -Recurse -File -Include *.java, *.xml |
+$srcNewest = Get-ChildItem (Join-Path $root 'campus-server\src') -Recurse -File -Include *.java, *.xml |
              Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$clsNewest = Get-ChildItem (Join-Path $root 'sky-server\target\classes') -Recurse -File -ErrorAction SilentlyContinue |
+$clsNewest = Get-ChildItem (Join-Path $root 'campus-server\target\classes') -Recurse -File -ErrorAction SilentlyContinue |
              Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($srcNewest -and $clsNewest -and $srcNewest.LastWriteTime -gt $clsNewest.LastWriteTime) {
     Write-Host "⚠️  源码比编译产物新！请先执行 mvn compile，否则跑的是旧代码" -ForegroundColor Yellow

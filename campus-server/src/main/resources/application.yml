@@ -1,0 +1,72 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: dev
+  main:
+    allow-circular-references: true
+  task:
+    scheduling:
+      pool:
+        size: 5
+  datasource:
+    druid:
+      driver-class-name: ${campus.datasource.driver-class-name}
+      url: jdbc:mysql://${campus.datasource.host}:${campus.datasource.port}/${campus.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${campus.datasource.username}
+      password: ${campus.datasource.password}
+  redis:
+    host: ${campus.redis.host}
+    port: ${campus.redis.port}
+    password: ${campus.redis.password}
+    database: ${campus.redis.database}
+
+mybatis:
+  #mapper配置文件
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.campus.entity
+  configuration:
+    #开启驼峰命名
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    com:
+      campus:
+        mapper: debug
+        service: info
+        controller: info
+
+campus:
+  jwt:
+    #管理员Jwt
+    # 设置jwt签名加密时使用的秘钥
+    admin-secret-key: itcast
+    # 设置jwt过期时间
+    admin-ttl: 7200000
+    # 设置前端传递过来的令牌名称
+    admin-token-name: token
+    #用户Jwt
+    user-secret-key: itheima
+    user-ttl: 7200000
+    user-token-name: authentication
+
+  alioss:
+    endpoint: ${campus.alioss.endpoint}
+    access-key-id: ${campus.alioss.access-key-id}
+    access-key-secret: ${campus.alioss.access-key-secret}
+    bucket-name: ${campus.alioss.bucket-name}
+
+  wechat:
+    appid: ${campus.wechat.appid}
+    secret: ${campus.wechat.secret}
+    mchid: ${campus.wechat.mchid}
+    mchSerialNo: ${campus.wechat.mchSerialNo}
+    privateKeyFilePath: ${campus.wechat.privateKeyFilePath}
+    apiV3Key: ${campus.wechat.apiV3Key}
+    weChatPayCertFilePath: ${campus.wechat.weChatPayCertFilePath}
+    notifyUrl: ${campus.wechat.notifyUrl}
+    refundNotifyUrl: ${campus.wechat.refundNotifyUrl}
+
+

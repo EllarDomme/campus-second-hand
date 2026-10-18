@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.campus.mapper.FavoriteMapper">
+
+    <!--
+        我的收藏列表：从 favorite 出发，关联 product 拿到商品信息
+
+        【填空 ③】把 FILL_IN_HERE_3 换成关联条件。
+          提示：两张表的关联关系是 —— favorite.product_id 等于 product.id
+              写法参考 ProductMapper.xml 里 selectList 的 left join（那一行是
+              left join category c on p.category_id = c.id）
+          注意：这里两张表的别名是 f（favorite）和 p（product）
+
+        为什么用 left join 而不是 inner join：
+          万一商品被卖家删掉了，inner join 会让这条收藏记录直接消失；
+          用 left join 至少还能查到记录（商品字段为 null），
+          "收藏的商品被删了"这件事也就能被前端提示出来。
+    -->
+    <select id="listByUserId" resultType="com.campus.vo.ProductVO">
+        select p.id              id,
+               p.seller_id       sellerId,
+               p.category_id     categoryId,
+               p.title           title,
+               p.price           price,
+               p.images          images,
+               p.description     description,
+               p.condition_level conditionLevel,
+               p.is_flash_sale   isFlashSale,
+               p.audit_status    auditStatus,
+               p.status          status,
+               p.update_time     updateTime
+        from favorite f
+        left join product p on f.product_id = p.id
+        where f.user_id = #{userId}
+        order by f.create_time desc
+    </select>
+
+</mapper>

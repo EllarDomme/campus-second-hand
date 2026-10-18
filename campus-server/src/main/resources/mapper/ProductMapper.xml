@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.campus.mapper.ProductMapper">
+
+    <!-- 动态更新：只更新传了值的字段 -->
+    <update id="updateById">
+        update product
+        <set>
+            <if test="categoryId != null">category_id = #{categoryId},</if>
+            <if test="title != null">title = #{title},</if>
+            <if test="price != null">price = #{price},</if>
+            <if test="images != null">images = #{images},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="conditionLevel != null">condition_level = #{conditionLevel},</if>
+            <if test="isFlashSale != null">is_flash_sale = #{isFlashSale},</if>
+            <if test="flashStartTime != null">flash_start_time = #{flashStartTime},</if>
+            <if test="auditStatus != null">audit_status = #{auditStatus},</if>
+            <if test="auditNote != null">audit_note = #{auditNote},</if>
+            <if test="auditTime != null">audit_time = #{auditTime},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <!--
+        分页查询：关联 category 拿分类名称
+        注意列名与 VO 属性的对应关系（驼峰映射对带下划线的列有效，但这里都显式写了别名，更直观）
+    -->
+    <select id="selectList" resultType="com.campus.vo.ProductVO">
+        select p.id                     id,
+               p.seller_id              sellerId,
+               p.category_id            categoryId,
+               p.title                  title,
+               p.price                  price,
+               p.images                 images,
+               p.description            description,
+               p.condition_level        conditionLevel,
+               p.is_flash_sale          isFlashSale,
+               p.flash_start_time       flashStartTime,
+               p.audit_status           auditStatus,
+               p.audit_note             auditNote,
+               p.status                 status,
+               p.update_time            updateTime,
+               c.category_name          categoryName
+        from product p
+        left join category c on p.category_id = c.id
+        <where>
+            <if test="categoryId != null">
+                and p.category_id = #{categoryId}
+            </if>
+            <if test="title != null and title != ''">
+                and p.title like concat('%', #{title}, '%')
+            </if>
+            <if test="status != null">
+                and p.status = #{status}
+            </if>
+            <if test="auditStatus != null">
+                and p.audit_status = #{auditStatus}
+            </if>
+            <if test="sellerId != null">
+                and p.seller_id = #{sellerId}
+            </if>
+        </where>
+        order by p.create_time desc, p.id desc
+    </select>
+
+    <!-- 条件查询商品（返回实体，供服务层再加工） -->
+    <select id="list" resultType="com.campus.entity.Product">
+        select * from product
+        <where>
+            <if test="categoryId != null">
+                and category_id = #{categoryId}
+            </if>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="auditStatus != null">
+                and audit_status = #{auditStatus}
+            </if>
+            <if test="sellerId != null">
+                and seller_id = #{sellerId}
+            </if>
+            <if test="isFlashSale != null">
+                and is_flash_sale = #{isFlashSale}
+            </if>
+        </where>
+        order by create_time desc, id desc
+    </select>
+
+    <select id="countByMap" resultType="java.lang.Integer">
+        select count(id) from product
+        <where>
+            <if test="status != null">
+                and status = #{status}
+            </if>
+            <if test="categoryId != null">
+                and category_id = #{categoryId}
+            </if>
+            <if test="auditStatus != null">
+                and audit_status = #{auditStatus}
+            </if>
+        </where>
+    </select>
+
+    <!-- 捡漏专区：捡漏 + 已过审 + 未下架（在售0 / 交易中1 都查出来，后者前端显示"已抢光"） -->
+    <select id="listFlashSale" resultType="com.campus.vo.FlashSaleVO">
+        select p.id,
+               p.title,
+               p.images,
+               p.price,
+               p.condition_level  conditionLevel,
+               p.flash_start_time flashStartTime,
+               p.status,
+               u.nickname         sellerName
+        from product p
+        left join user u on p.seller_id = u.id
+        where p.is_flash_sale = 1
+          and p.audit_status = 1
+          and p.status in (0, 1)
+        order by p.flash_start_time asc, p.id desc
+    </select>
+
+    <!--
+        管理端-捡漏活动列表（S4-3）
+        和用户端 listFlashSale 的区别：
+          · 不限制商品状态（已抢走/已下架也要给管理员看到）
+          · 带出"参与人数"和"抢到人数" —— 管理员靠这两个数字判断活动热度
+          · 排序：进行中/在售的排前面，方便管理员优先处理
+    -->
+    <select id="listFlashSaleForAdmin" resultType="com.campus.vo.FlashSaleAdminVO">
+        select p.id                 productId,
+               p.title,
+               p.price,
+               p.flash_start_time   flashStartTime,
+               p.status,
+               u.nickname           sellerNickname,
+               (select count(*) from flash_sale_record r where r.product_id = p.id) participants,
+               (select count(*) from flash_sale_record r where r.product_id = p.id and r.is_success = 1) grabbed
+        from product p
+        left join user u on p.seller_id = u.id
+        where p.is_flash_sale = 1
+        order by p.status asc, p.flash_start_time asc, p.id desc
+    </select>
+
+</mapper>

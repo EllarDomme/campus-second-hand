@@ -2,7 +2,7 @@
 #
 # 为什么不用 mvn spring-boot:run？
 #   1) 本机 Maven 本地仓库（mvn_repo）不可写，无法 mvn install 反应堆模块；
-#   2) 从 sky-server 目录直接 run 会从仓库取「旧版」sky-common / sky-pojo jar，
+#   2) 从 campus-server 目录直接 run 会从仓库取「旧版」campus-common / campus-pojo jar，
 #      而这两个模块的改动不会生效（例如 MessageConstant 常量改名会抛 NoSuchFieldError）。
 # 因此本脚本把三个模块的 target/classes 放在 classpath 最前面，保证拿到的是最新编译结果。
 #
@@ -24,18 +24,18 @@ if ($Rebuild) {
 
 if (-not (Test-Path -LiteralPath $cpFile)) {
     Write-Host 'classpath 缺失，正在生成...'
-    & mvn -B -o -q -f (Join-Path $base 'sky-server\pom.xml') dependency:build-classpath `
+    & mvn -B -o -q -f (Join-Path $base 'campus-server\pom.xml') dependency:build-classpath `
         "-Dmdep.outputFile=$cpFile" '-DincludeScope=runtime'
 }
 
 $deps = (Get-Content -LiteralPath $cpFile -Raw).Trim()
-$modules = @('sky-common', 'sky-pojo', 'sky-server') |
+$modules = @('campus-common', 'campus-pojo', 'campus-server') |
     ForEach-Object { Join-Path $base "$_\target\classes" } |
     Where-Object { Test-Path -LiteralPath $_ }
 $classpath = (($modules + $deps) -join ';')
 
-Write-Host "启动 sky-server（JDK: $env:JAVA_HOME）..."
+Write-Host "启动 campus-server（JDK: $env:JAVA_HOME）..."
 # 用参数数组传递，避免 PowerShell 把 -Dkey=value 拆成两个参数
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
-$javaArgs = @('-Dfile.encoding=UTF-8', '-cp', $classpath, 'com.sky.SkyApplication')
+$javaArgs = @('-Dfile.encoding=UTF-8', '-cp', $classpath, 'com.campus.CampusApplication')
 & "$env:JAVA_HOME\bin\java.exe" @javaArgs

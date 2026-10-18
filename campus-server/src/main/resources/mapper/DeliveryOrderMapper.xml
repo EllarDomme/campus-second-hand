@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.campus.mapper.DeliveryOrderMapper">
+
+    <!--
+        跑腿单的公共查询列
+        跑腿单本身只存"跑腿信息"，商品和双方昵称都要从主订单关联出来 ——
+        阶段 1 规格特意定了"不冗余存买卖双方和商品"，就是为了避免两处数据不一致。
+    -->
+    <sql id="baseColumns">
+        d.id,
+        d.trade_order_id    tradeOrderId,
+        d.runner_user_id    runnerUserId,
+        d.pick_address      pickAddress,
+        d.receive_address   receiveAddress,
+        d.delivery_fee      deliveryFee,
+        d.status,
+        d.accept_time       acceptTime,
+        d.finish_time       finishTime,
+        d.create_time       createTime,
+        o.order_no          orderNo,
+        o.buyer_id          buyerId,
+        o.seller_id         sellerId,
+        p.title             productTitle,
+        p.images            productImages,
+        bu.nickname         buyerNickname,
+        su.nickname         sellerNickname
+    </sql>
+
+    <sql id="baseJoins">
+        from delivery_order d
+        join trade_order o on d.trade_order_id = o.id
+        left join product p on o.product_id = p.id
+        left join user bu on o.buyer_id = bu.id
+        left join user su on o.seller_id = su.id
+    </sql>
+
+    <!--
+        待接单大厅（跑腿员视角）
+        只列"待接单 + 主订单还没结束"的单子：
+        主订单已经取消/完成的跑腿单不该再出现在大厅里（状态是 0 但没人该去接）
+        排序：跑腿费高的优先，同价先发布的优先 —— 跑腿员最关心赚多少
+    -->
+    <select id="listAvailable" resultType="com.campus.vo.DeliveryOrderVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where d.status = 0
+          and o.status in (0, 1)
+        order by d.delivery_fee desc, d.id asc
+    </select>
+
+    <!-- 我的跑腿单（跑腿员视角）：手上的和历史的全都在，按最新在前 -->
+    <select id="listMyOrders" resultType="com.campus.vo.DeliveryOrderVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where d.runner_user_id = #{runnerUserId}
+        order by d.id desc
+        limit 100
+    </select>
+
+    <select id="getDetailById" resultType="com.campus.vo.DeliveryOrderVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        where d.id = #{id}
+    </select>
+
+    <!--
+        跑腿员收入统计
+        一条 SQL 同时算三个数字，靠 case when 做"分状态求和"：
+          · 已完成单数 / 累计跑腿费：只看已送达（status=3）
+          · 进行中单数：已接单 + 取货中
+        ifnull(..., 0) 不能省：一单都没有时 sum() 返回 NULL，
+        前端拿到 null 会显示成空白甚至报错。
+    -->
+    <select id="getIncome" resultType="com.campus.vo.RunnerIncomeVO">
+        select ifnull(sum(case when status = 3 then 1 else 0 end), 0)                     finishedCount,
+               ifnull(sum(case when status = 3 then delivery_fee else 0 end), 0)          totalFee,
+               ifnull(sum(case when status in (1, 2) then 1 else 0 end), 0)               ongoingCount
+        from delivery_order
+        where runner_user_id = #{runnerUserId}
+    </select>
+
+    <!--
+        管理端-跑腿单分页列表（S4-4）
+        和"待接单大厅"的区别：这里不限制状态，管理员要看全部；
+        三个筛选条件都可空（不传就是不过滤）。
+        排序：先按状态（待接单/已接单/取货中 排在已结束前面），
+              同状态按 id 倒序（新的在前）—— 管理员最关心"还活着的单子"。
+    -->
+    <select id="listForAdmin" resultType="com.campus.vo.DeliveryOrderVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        <where>
+            <if test="status != null">
+                and d.status = #{status}
+            </if>
+            <if test="runnerUserId != null">
+                and d.runner_user_id = #{runnerUserId}
+            </if>
+            <if test="tradeOrderId != null">
+                and d.trade_order_id = #{tradeOrderId}
+            </if>
+        </where>
+        order by d.status asc, d.id desc
+    </select>
+
+</mapper>

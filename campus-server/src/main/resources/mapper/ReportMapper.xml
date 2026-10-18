@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<!--
+    =====================================================================
+    数据看板的统计 SQL（S4-2）—— 【三段 SQL 由你写】
+
+    下面每条 select 现在都只是"返回 0 的占位语句"，
+    所以接口能跑通、只是数字全是 0。你把真正的 SQL 填进去，看板就活了。
+
+    写的时候注意三件事：
+      ① 没有匹配数据时 sum() 返回 NULL → 用 ifnull(..., 0) 包住
+      ② 一条 SQL 里用 sum(case when 条件 then 1 else 0 end) 可以同时算多个计数
+      ③ 别名必须和 VO 的字段名一致（今日成交单数 → todayOrders）
+
+    注意：XML 注释里【不能出现连续两个减号】，所以下面用 ===== 做分隔线。
+    =====================================================================
+-->
+
+<mapper namespace="com.campus.mapper.ReportMapper">
+
+    <!--
+        【待办 3】交易概况：一条 SQL 算出 5 个数字
+        =====================================================================
+        目标字段：
+          todayOrders   今日成交单数      order.status = 2 且 finish_time >= #{todayStart}
+          todayAmount   今日成交额        sum(real_price)
+          monthOrders   本月成交单数      finish_time >= #{monthStart}
+          monthAmount   本月成交额
+          totalAmount   累计成交额        sum(real_price) where status = 2
+
+        提示：
+          · 主体是 from trade_order where status = 2
+          · 计数用 sum(case when 条件 then 1 else 0 end)
+          · 金额用 sum(case when 条件 then real_price else 0 end)
+          · 最外层包 ifnull(..., 0)
+          · 时间比较：finish_time >= #{todayStart}
+        =====================================================================
+    -->
+    <select id="tradeSummary" resultType="com.campus.vo.DashboardTradeVO">
+        <!-- ↓↓↓ 你的 SQL 写在这里（现在只是占位）↓↓↓ -->
+        select
+            ifnull(sum(case when finish_time >= #{todayStart} then 1 else 0 end),0) as todayOrders,
+            ifnull(sum(case when finish_time >= #{todayStart} then real_price else 0 end),0) as todayAmount,
+            ifnull(sum(case when finish_time >= #{monthStart} then 1 else 0 end),0) as monthOrders,
+            ifnull(sum(case when finish_time >= #{monthStart} then real_price else 0 end),0) as monthAmount,
+            ifnull(sum(real_price),0) as totalAmount
+        from trade_order where status = 2
+        <!-- ↑↑↑ 你的 SQL 写到这上面 ↑↑↑ -->
+    </select>
+
+    <!--
+        【待办 4】用户概况：4 个计数
+        =====================================================================
+          totalUsers       count(*)
+          totalRunners     role = 1
+          bannedUsers      status = 1
+          lowCreditUsers   credit_score < #{lowCredit}
+        提示：同样可以一条 SQL 用 sum(case when ...) 算完，不要写成 4 条。
+        =====================================================================
+    -->
+    <select id="userSummary" resultType="com.campus.vo.DashboardUserVO">
+        <!--
+            ┌── 【错题标记 #28】手打 SQL 的三个笔误 ────────────────────────────
+            │ 你当时写的：
+            │     ifbull(sum(...))                                ← 函数名错（ifbull）
+            │     ifnll(sum(case when credit_score < #{lowCredit}))← 函数名错 + 少了 then 1 else 0 end
+            │                                                        + 少了别名
+            │ 后果：整个 userSummary 查询直接语法错误 → 看板接口 500。
+            │
+            │ 教训：SQL 里"函数名拼错"和"case when 少写 then"都是【整条查询报废】，
+            │       而且 IDEA 的 Java 语法检查管不到 XML 里的 SQL。
+            │ 最实用的自查办法：**写完先在数据库客户端里跑一遍** ——
+            │   mysql -uroot -p -e "select ... from user"
+            │   把 #{xxx} 换成具体值（比如 80）试试。
+            │   在 SQL 客户端里 1 秒就能发现的问题，不用等整个应用跑起来。
+            └──────────────────────────────────────────────────────────────
+        -->
+        select
+            count(*)                                                                  as totalUsers,
+            ifnull(sum(case when role = 1 then 1 else 0 end), 0)                      as totalRunners,
+            ifnull(sum(case when status = 1 then 1 else 0 end), 0)                    as bannedUsers,
+            ifnull(sum(case when credit_score &lt; #{lowCredit} then 1 else 0 end), 0) as lowCreditUsers
+        from user
+    </select>
+
+    <!--
+        【待办 5】商品概况：4 个计数
+        =====================================================================
+          onSaleProducts       status = 0
+          inTradeProducts      status = 1
+          soldOutProducts      status = 2
+          pendingAuditProducts audit_status = 0
+        =====================================================================
+    -->
+    <select id="productSummary" resultType="com.campus.vo.DashboardProductVO">
+        <!-- ↓↓↓ 你的 SQL 写在这里（现在只是占位）↓↓↓ -->
+        select
+            ifnull(sum(case when status = 0 then 1 else 0 end),0) as onSaleProducts,
+            ifnull(sum(case when status = 1 then 1 else 0 end),0) as inTradeProducts,
+            ifnull(sum(case when status = 2 then 1 else 0 end),0) as soldOutProducts,
+            ifnull(sum(case when audit_status = 0 then 1 else 0 end),0) as pendingAuditProducts
+        from product
+        <!-- ↑↑↑ 你的 SQL 写到这上面 ↑↑↑ -->
+    </select>
+
+</mapper>

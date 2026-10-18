@@ -100,7 +100,7 @@ for pid in (1, 2, 3):
     r = call("POST", "/admin/flashSale/resetStock/%d" % pid, {"token": admin})
     if r.get("code") != 1:
         print("  ⚠️ 重置库存失败（productId=%d）：%s" % (pid, r.get("msg")))
-        print("     请确认 sky.debug.enabled = true")
+        print("     请确认 campus.debug.enabled = true")
 print("  完成")
 
 # 一、捡漏专区列表

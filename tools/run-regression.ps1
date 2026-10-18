@@ -10,7 +10,7 @@
     3. 重置订单数据 → 跑 tools\order-flow-test.py  —— 订单全流程（19 项）
     4. 重置议价数据 → 跑 tools\bargain-test.py     —— 议价（12 项）
 
-数据库连接信息从 sky-server\src\main\resources\application-dev.yml 读取
+数据库连接信息从 campus-server\src\main\resources\application-dev.yml 读取
 （该文件已被 .gitignore 排除，所以密码不会进仓库）。
 
 退出码：0 = 全部通过；1 = 有失败
@@ -52,7 +52,7 @@ if (-not $pyExe) {
 }
 
 # ---------- 2. 数据库连接信息（从 application-dev.yml 读，避免把密码写进脚本）----------
-$yml = Join-Path $root 'sky-server\src\main\resources\application-dev.yml'
+$yml = Join-Path $root 'campus-server\src\main\resources\application-dev.yml'
 $mysqlExe = $null
 foreach ($cand in @('mysql', 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe')) {
     if (Get-Command $cand -ErrorAction SilentlyContinue) { $mysqlExe = (Get-Command $cand).Source; break }

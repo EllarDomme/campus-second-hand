@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.campus.mapper.UserMapper">
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into user (openid, nickname, real_name, student_no, student_card_img, phone, credit_score, role, status, avatar, create_time, update_time)
+        values (#{openid}, #{nickname}, #{realName}, #{studentNo}, #{studentCardImg}, #{phone}, #{creditScore}, #{role}, #{status}, #{avatar}, #{createTime}, #{updateTime})
+    </insert>
+    <select id="getUserCount" resultType="java.lang.Long">
+        select count(id) from user
+        <where>
+            <if test="beginTime != null">
+                and create_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null">
+                and create_time &lt;= #{endTime}
+            </if>
+        </where>
+    </select>
+    <select id="countByMap" resultType="java.lang.Integer">
+        select count(id) from user
+        <where>
+            <if test="beginTime != null">
+                and create_time &gt;= #{beginTime}
+            </if>
+            <if test="endTime != null">
+                and create_time &lt;= #{endTime}
+            </if>
+        </where>
+    </select>
+    <!--
+        管理端-用户列表（S4-1）
+
+        好评/差评数用两个子查询算出来，不另外发请求：
+        管理员看列表时最需要一眼判断"这个人的信誉如何"，
+        如果让前端逐个用户再查一次，N 个用户就是 N+1 次请求。
+
+        （数据量大时更好的做法是在 user 表冗余两个计数字段，或者用 group by 一次算完；
+          这里用户量小，子查询足够，而且不用维护冗余字段的一致性。）
+    -->
+    <sql id="adminColumns">
+        u.id,
+        u.nickname,
+        u.avatar,
+        u.phone,
+        u.student_no    studentNo,
+        u.role,
+        u.status,
+        u.credit_score  creditScore,
+        u.create_time   createTime,
+        (select count(*) from review r where r.to_user_id = u.id and r.star &gt;= 4) goodReviewCount,
+        (select count(*) from review r where r.to_user_id = u.id and r.star &lt;= 2) badReviewCount
+    </sql>
+
+    <select id="listForAdmin" resultType="com.campus.vo.UserAdminVO">
+        select <include refid="adminColumns"/>
+        from user u
+        <where>
+            <if test="status != null">
+                and u.status = #{status}
+            </if>
+            <if test="role != null">
+                and u.role = #{role}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                and (u.nickname like concat('%', #{keyword}, '%')
+                     or u.phone like concat('%', #{keyword}, '%')
+                     or u.student_no like concat('%', #{keyword}, '%'))
+            </if>
+        </where>
+        order by u.id desc
+    </select>
+
+    <select id="getAdminDetailById" resultType="com.campus.vo.UserAdminVO">
+        select <include refid="adminColumns"/>
+        from user u
+        where u.id = #{id}
+    </select>
+
+</mapper>

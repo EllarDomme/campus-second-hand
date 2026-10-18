@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.campus.mapper.BargainMapper">
+
+    <!-- 动态更新：改状态 / 写还价 / 回填订单id 都用它 -->
+    <update id="update" parameterType="com.campus.entity.Bargain">
+        update bargain
+        <set>
+            <if test="sellerCounterOffer != null">seller_counter_offer = #{sellerCounterOffer},</if>
+            <if test="bargainStatus != null">bargain_status = #{bargainStatus},</if>
+            <if test="orderId != null">order_id = #{orderId},</if>
+            <if test="expireTime != null">expire_time = #{expireTime},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <!--
+        我的议价分页
+
+        关联了三张表：
+          product  拿商品标题/图片/标价（前端要展示"标价 100，他出价 75"）
+          user bu  买家昵称
+          user su  卖家昵称
+        一次把两边昵称都查出来，买家视角和卖家视角共用一条 SQL（前端自己挑要显示哪个）。
+
+        注意：select 列表是逐个列写明并起别名的，不用 select *
+              （原因见 TradeOrderMapper.xml 里的说明：三张表有大量同名列）
+    -->
+    <select id="pageQuery" resultType="com.campus.vo.BargainVO">
+        select b.id,
+               b.seller_id            sellerId,
+               b.buyer_id             buyerId,
+               b.product_id           productId,
+               b.buyer_offer          buyerOffer,
+               b.seller_counter_offer sellerCounterOffer,
+               b.bargain_status       bargainStatus,
+               b.order_id             orderId,
+               b.expire_time          expireTime,
+               b.create_time          createTime,
+               p.title                productTitle,
+               p.images               productImages,
+               p.price                productPrice,
+               bu.nickname            buyerName,
+               su.nickname            sellerName
+        from bargain b
+        left join product p on b.product_id = p.id
+        left join user bu on b.buyer_id = bu.id
+        left join user su on b.seller_id = su.id
+        <where>
+            <if test="buyerId != null">and b.buyer_id = #{buyerId}</if>
+            <if test="sellerId != null">and b.seller_id = #{sellerId}</if>
+            <if test="bargainStatus != null">and b.bargain_status = #{bargainStatus}</if>
+        </where>
+        order by b.create_time desc
+    </select>
+
+</mapper>

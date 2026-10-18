@@ -49,7 +49,7 @@ def login(openid):
     r = call("GET", "/user/user/testLogin?openid=" + openid)
     if r.get("code") != 1:
         print("❌ 测试登录失败（openid=%s）：%s" % (openid, r.get("msg")))
-        print("   请确认服务已启动、且 sky.debug.enabled = true")
+        print("   请确认服务已启动、且 campus.debug.enabled = true")
         sys.exit(1)
     return r["data"]["token"]
 

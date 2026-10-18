@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.campus.mapper.TradeOrderMapper">
+
+    <!-- 动态更新：只更新传了值的字段，避免把没传的字段覆盖成 null -->
+    <update id="update" parameterType="com.campus.entity.TradeOrder">
+        update trade_order
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="payStatus != null">pay_status = #{payStatus},</if>
+            <if test="payTime != null">pay_time = #{payTime},</if>
+            <if test="payNo != null">pay_no = #{payNo},</if>
+            <if test="pickupPlace != null">pickup_place = #{pickupPlace},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="expireTime != null">expire_time = #{expireTime},</if>
+            <if test="finishTime != null">finish_time = #{finishTime},</if>
+            <if test="cancelReason != null">cancel_reason = #{cancelReason},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <!--
+        我的订单分页查询（带商品标题/图片）
+
+        三个关键点：
+        ① resultType 必须是 com.campus.vo.TradeOrderVO，不是 TradeOrder 实体
+           —— 因为要装 productTitle / productImages，这两个字段实体里没有
+           —— 而且必须和 Mapper 接口的返回类型 Page<TradeOrderVO> 对得上
+        ② 不能用 select *：两张表都有 id / seller_id / status / create_time / update_time，
+           列名撞车后 VO 里只会装进其中一个（不报错，但数据是错的）
+        ③ 动态条件写在 <where> 里：
+           <where> 会自动处理"第一个条件前面多余的 and"
+           PageHelper 会自动在这条 SQL 后面补 LIMIT，所以这里不用写 limit
+    -->
+    <select id="pageQuery" resultType="com.campus.vo.TradeOrderVO">
+        select o.id,
+               o.order_no,
+               o.seller_id,
+               o.buyer_id,
+               o.product_id,
+               o.real_price,
+               o.deal_type,
+               o.order_source,
+               o.status,
+               o.pay_status,
+               o.pay_time,
+               o.pickup_place,
+               o.remark,
+               o.expire_time,
+               o.finish_time,
+               o.cancel_reason,
+               o.create_time,
+               p.title  as productTitle,
+               p.images as productImages
+        from trade_order o
+        left join product p on o.product_id = p.id
+        <where>
+            <if test="buyerId != null">and o.buyer_id = #{buyerId}</if>
+            <if test="sellerId != null">and o.seller_id = #{sellerId}</if>
+            <if test="status != null">and o.status = #{status}</if>
+        </where>
+        order by o.create_time desc
+    </select>
+
+    <!-- 订单详情：和上面几乎一样，只是按 id 查一条 -->
+    <select id="getVOById" resultType="com.campus.vo.TradeOrderVO">
+        select o.id,
+               o.order_no,
+               o.seller_id,
+               o.buyer_id,
+               o.product_id,
+               o.real_price,
+               o.deal_type,
+               o.order_source,
+               o.status,
+               o.pay_status,
+               o.pay_time,
+               o.pickup_place,
+               o.remark,
+               o.expire_time,
+               o.finish_time,
+               o.cancel_reason,
+               o.create_time,
+               p.title  as productTitle,
+               p.images as productImages
+        from trade_order o
+        left join product p on o.product_id = p.id
+        where o.id = #{id}
+    </select>
+
+</mapper>
