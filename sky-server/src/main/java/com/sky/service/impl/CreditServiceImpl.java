@@ -53,6 +53,20 @@ public class CreditServiceImpl implements CreditService {
     @Transactional
     @Override
     public int changeCredit(Long userId, int changeScore, Integer reasonType, Long refId, String remark) {
+        // 默认计入每日加分上限（正常场景：完成交易、收到好评）
+        return changeCredit(userId, changeScore, reasonType, refId, remark, true);
+    }
+
+    /**
+     * @param countTowardDailyCap 是否计入"每日加分上限"
+     *        true  = 正常加分（完成交易 / 好评）
+     *        false = 补偿性加分（撤销差评扣分、管理员纠正误判）
+     *                —— 撤销处罚不是刷分行为，不该被防刷上限吞掉
+     */
+    @Transactional
+    @Override
+    public int changeCredit(Long userId, int changeScore, Integer reasonType, Long refId,
+                            String remark, boolean countTowardDailyCap) {
         if (userId == null || changeScore == 0) {
             return 0;
         }
@@ -79,7 +93,10 @@ public class CreditServiceImpl implements CreditService {
         //   ⚠️ 注意 if 的范围：只有加分才走这段，扣分（负数）直接跳过。
         //      写成 if (changeScore != 0) 就错了 —— 那会让恶意用户
         //      "每天最多扣 10 分"，反而成了护身符。
-        if(changeScore > 0){
+        //
+        //   ⚠️ 补充：还要判 countTowardDailyCap ——
+        //      补偿性加分（撤销差评扣分）不受上限约束，否则"处罚撤销了但分数不还"。
+        if (countTowardDailyCap && changeScore > 0) {
             LocalDateTime todayStart = LocalDate.now().atStartOfDay();
             Integer todayAdded = creditLogMapper.sumAddedSince(userId,todayStart);
             int remain = CreditConstant.DAILY_ADD_LIMIT - (todayAdded == null ? 0 : todayAdded);

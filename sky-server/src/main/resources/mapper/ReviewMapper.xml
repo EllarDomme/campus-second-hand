@@ -44,4 +44,28 @@
         limit 100
     </select>
 
+    <!--
+        管理端-评价分页列表（S4-5）
+        三个筛选条件都可空（不传就是不过滤）。
+        管理员最常用的两个视角：
+          · star=1 → 看所有 1 星，排查恶意差评
+          · toUserId=某用户 → 看这个人收到的全部评价，判断是否被针对
+    -->
+    <select id="listForAdmin" resultType="com.sky.vo.ReviewVO">
+        select <include refid="baseColumns"/>
+        <include refid="baseJoins"/>
+        <where>
+            <if test="productId != null">
+                and r.product_id = #{productId}
+            </if>
+            <if test="toUserId != null">
+                and r.to_user_id = #{toUserId}
+            </if>
+            <if test="star != null">
+                and r.star = #{star}
+            </if>
+        </where>
+        order by r.id desc
+    </select>
+
 </mapper>

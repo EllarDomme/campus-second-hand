@@ -1,14 +1,18 @@
 package com.sky.service.impl;
 
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.sky.constant.CreditConstant;
 import com.sky.constant.OrderConstant;
 import com.sky.context.BaseContext;
+import com.sky.dto.ReviewPageQueryDTO;
 import com.sky.dto.ReviewSubmitDTO;
 import com.sky.entity.Review;
 import com.sky.entity.TradeOrder;
 import com.sky.exception.BaseException;
 import com.sky.mapper.ReviewMapper;
 import com.sky.mapper.TradeOrderMapper;
+import com.sky.result.PageResult;
 import com.sky.service.CreditService;
 import com.sky.service.ReviewService;
 import com.sky.vo.ReviewVO;
@@ -191,6 +195,101 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     public List<Review> mySentReviews() {
         return reviewMapper.listByFromUser(BaseContext.getCurrentId());
+    }
+
+    // ==========================================================================
+    // 管理端-评价管理（S4-5）
+    //   pageForAdmin 已写好；deleteByAdmin 是【留给你的练习】
+    // ==========================================================================
+
+    /** 【管理端】评价分页列表（已写好） */
+    @Override
+    public PageResult pageForAdmin(ReviewPageQueryDTO query) {
+        int p = (query.getPage() == null || query.getPage() < 1) ? 1 : query.getPage();
+        int size = (query.getPageSize() == null || query.getPageSize() < 1) ? 10 : query.getPageSize();
+        PageHelper.startPage(p, size);
+        List<ReviewVO> list = reviewMapper.listForAdmin(query);
+        Page<ReviewVO> pageInfo = (Page<ReviewVO>) list;
+        return new PageResult(pageInfo.getTotal(), list);
+    }
+
+    /**
+     * 【管理端】删除违规评价（含信用分回退）
+     */
+    @Override
+    public void deleteByAdmin(Long id, String reason) {
+        // ================= 你的部分：填空 A1 ~ A4 =================
+        //
+        // 【A1】原因必填
+        //   · reason 为 null 或 trim 后为空
+        //        → throw new BaseException("删除评价必须填写原因")
+        if(reason == null || reason.trim().isEmpty()){
+            throw new BaseException("删除评价必须填写原因");
+        }
+        // 【A2】评价必须存在
+        //   Review review = reviewMapper.getById(id);
+        //   · review == null → throw new BaseException("评价不存在")
+        Review review = reviewMapper.getById(id);
+        if(review == null){
+            throw new BaseException("评价不存在");
+        }
+        // 【A3】⭐ 信用分回退（本方法最有价值的地方）
+        //   删除评价时，要把这条评价当初对【被评价人】造成的加减分还回去：
+        //     · review.getStar() >= CreditConstant.GOOD_REVIEW_STAR(4)
+        //          → 当初加了 SCORE_GOOD_REVIEW(+1) → 现在加【反向值】-1
+        //     · review.getStar() <= CreditConstant.BAD_REVIEW_STAR(2)
+        //          → 当初加了 SCORE_BAD_REVIEW(-2) → 现在加【反向值】+2
+        //     · 3 星（中评）→ 当初没动信用分 → 现在也不用动
+        int score = 0;
+        if(review.getStar() >= CreditConstant.GOOD_REVIEW_STAR){
+            score = -CreditConstant.SCORE_GOOD_REVIEW;
+        }
+        // ┌── 【错题标记 #32】常量名太像，用错了编译器也不报 ────────────────
+        // │ 你当时写的：else if (review.getStar() <= CreditConstant.SCORE_BAD_REVIEW)
+        // │ 两个常量只差一个词，含义完全不同：
+        // │   CreditConstant.SCORE_BAD_REVIEW = -2   ← 【分值】（加分/扣分的数值）
+        // │   CreditConstant.BAD_REVIEW_STAR   =  2   ← 【星级阈值】（1~2 星算差评）
+        // │ 后果：star(1~5) <= -2 永远不成立 → 删恶意差评时【被扣的分永远不还】✗
+        // │       而这正是本功能存在的意义 —— 逻辑全对，就是比错了东西。
+        // │ 而且两者都是 int，编译器完全无法提醒你 ✗
+        // │ 记法：遇到"名字很像的常量"时，读一遍它的注释再写；
+        // │      或者在脑子里把它们念全："SCORE 开头的是分数值，STAR 结尾的是星级门槛"。
+        // └──────────────────────────────────────────────────────────────
+        else if(review.getStar() <= CreditConstant.BAD_REVIEW_STAR){
+            score = -CreditConstant.SCORE_BAD_REVIEW;
+        }
+        //   调用：
+        //     creditService.changeCredit(
+        //             review.getToUserId(),
+        //             反向分值,                                    // 注意是取反！-x 变成 +x
+        //             CreditConstant.REASON_PLATFORM_TASK,         // 平台任务（8）
+        //             review.getId(),                              // refId 指向被删的评价
+        //             "管理员删除违规评价，信用分回退：" + reason);
+        creditService.changeCredit(
+                review.getToUserId(),
+                score,
+                CreditConstant.REASON_PLATFORM_TASK,
+                review.getId(),
+                "管理员删除违规评价，信用分回退：" + reason,
+                false   // ← ⭐ 补偿性加分，不受"每日加分上限"约束（否则分还不回来）
+        );
+        //   ⚠️ 为什么必须回退：差评当时扣了对方 2 分，你把差评删了却不还分，
+        //      等于"处罚没撤销" —— 对方会觉得平台删了评价但分数没恢复，莫名其妙。
+        //   ⚠️ 3 星那条别漏：如果不判星级就无脑回退，会把没动过的分数也改了。
+        //
+        // 【A4】删除 + 留痕
+        //   reviewMapper.deleteById(id);
+        //   log.warn("管理员删除违规评价：reviewId={}, 原星级={}, 被评价人={}, 原因={}, 管理员={}",
+        //           id, review.getStar(), review.getToUserId(), reason,
+        //           BaseContext.getCurrentId());
+        reviewMapper.deleteById(id);
+        log.warn("管理员删除违规评价：reviewId={},原星级={},被评价人={},原因={},管理员={}",
+                id,review.getStar(),review.getToUserId(),reason,BaseContext.getCurrentId());
+        //   ⚠️ 顺序：先回退信用分、再删评价（和"先抢处理权再扣分"不同 ——
+        //      这里两个操作在同一个事务里，顺序不影响一致性；
+        //      但先回退能让"信用分流水里的 refId=评价id"这条线索不会因为评价已删而断掉）
+        //
+        // =======================================================
     }
 
 }

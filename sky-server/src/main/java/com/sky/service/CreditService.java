@@ -30,6 +30,22 @@ public interface CreditService {
      */
     int changeCredit(Long userId, int changeScore, Integer reasonType, Long refId, String remark);
 
+    /**
+     * 变更信用分（可指定是否计入"每日加分上限"）
+     *
+     * ⚠️ 为什么需要这个重载：**补偿性的加分会撞上防刷上限**。
+     *   场景：某人今天已经加满 10 分 → 管理员删掉一条恶意差评，要还他 2 分 →
+     *   如果这 2 分也算"今日加分"，就会被上限直接吞掉 ✗
+     *   但"撤销处罚"根本不是刷分行为，不该受防刷规则约束 ✗
+     *
+     *   所以：正常加分（完成交易/好评）countTowardDailyCap = true；
+     *        补偿性加分（撤销差评扣分）countTowardDailyCap = false。
+     *
+     * @param countTowardDailyCap true = 计入每日加分上限（默认）；false = 不受上限约束
+     */
+    int changeCredit(Long userId, int changeScore, Integer reasonType, Long refId,
+                     String remark, boolean countTowardDailyCap);
+
     /** 我的信用分概览（当前分数 + 今日已加 + 好评/差评数） */
     CreditVO myCredit();
 

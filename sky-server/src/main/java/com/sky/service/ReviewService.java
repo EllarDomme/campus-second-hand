@@ -1,7 +1,9 @@
 package com.sky.service;
 
+import com.sky.dto.ReviewPageQueryDTO;
 import com.sky.dto.ReviewSubmitDTO;
 import com.sky.entity.Review;
+import com.sky.result.PageResult;
 import com.sky.vo.ReviewVO;
 
 import java.util.List;
@@ -28,5 +30,21 @@ public interface ReviewService {
 
     /** 我发出的评价 */
     List<Review> mySentReviews();
+
+    // ==================== 管理端-评价管理（S4-5）====================
+
+    /** 【管理端】评价分页列表（可按商品/被评价人/星级筛选） */
+    PageResult pageForAdmin(ReviewPageQueryDTO query);
+
+    /**
+     * 【管理端】删除违规评价（恶意差评、广告等）
+     *
+     * ⭐ 关键：删除时要【回退这条评价当时造成的信用分变化】——
+     *    差评当时扣了对方 2 分，删掉差评却不还分，等于处罚没撤销。
+     *
+     * @param id     评价id
+     * @param reason 删除原因（必填，便于事后举证）
+     */
+    void deleteByAdmin(Long id, String reason);
 
 }

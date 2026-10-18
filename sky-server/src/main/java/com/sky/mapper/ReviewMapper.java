@@ -1,7 +1,9 @@
 package com.sky.mapper;
 
+import com.sky.dto.ReviewPageQueryDTO;
 import com.sky.entity.Review;
 import com.sky.vo.ReviewVO;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -47,5 +49,24 @@ public interface ReviewMapper {
     /** 某人收到的"≤N 星"评价数（用来统计差评数） */
     @Select("select count(*) from review where to_user_id = #{userId} and star <= #{star}")
     int countByStarAtMost(@Param("userId") Long userId, @Param("star") int star);
+
+    // ==================== 管理端-评价管理（S4-5）====================
+
+    /** 按 id 查评价（管理端删除前要先拿到它，才知道该回退多少信用分） */
+    @Select("select * from review where id = #{id}")
+    Review getById(Long id);
+
+    /** 【管理端】评价分页列表（可按商品/被评价人/星级筛选，SQL 在 XML） */
+    List<ReviewVO> listForAdmin(ReviewPageQueryDTO query);
+
+    /**
+     * 物理删除一条评价
+     *
+     * ⚠️ 为什么是物理删除：review 表没有 is_deleted 字段，删了就真没了。
+     *    生产环境更规范的是【逻辑删除 + 删除原因】，便于事后举证"这条评价为什么被下架"。
+     *    这是本模块的已知简化（面试可主动说）。
+     */
+    @Delete("delete from review where id = #{id}")
+    int deleteById(Long id);
 
 }
