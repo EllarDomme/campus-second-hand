@@ -338,7 +338,24 @@ SELECT CONCAT('  跑腿员 = ', SUM(role=1)) FROM $dbName.user;
     Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
 }
 
-# ---------- 13. 汇总 ----------
+# ---------- 13. 管理端：数据看板（S4-2）----------
+Write-Head "⑩ 管理端-数据看板（13 个指标 + 数据自洽性）"
+if ($pyExe) {
+    # 看板用的是"当前库里的真实数据"，所以不需要专用重置脚本
+    $out = & $pyExe[0] @($pyExe[1..($pyExe.Count - 1)]) (Join-Path $root 'tools\dashboard-test.py') 2>&1
+    $out | Where-Object { $_ -match '^\s*(✅|❌|期望包含|实际返回|数据看板回归|RESULT|=====|  看板返回)' } |
+        ForEach-Object { Write-Host "  $_" }
+    $m = [regex]::Match(($out -join "`n"), 'RESULT pass=(\d+) fail=(\d+) total=(\d+)')
+    if ($m.Success) {
+        $passed += [int]$m.Groups[1].Value
+        $failed += [int]$m.Groups[2].Value
+        $summary += "管理端-数据看板      : 通过 $($m.Groups[1].Value) / $($m.Groups[3].Value)"
+    }
+} else {
+    Write-Host "  ⚠️ 跳过（没有可用的 Python）" -ForegroundColor Yellow
+}
+
+# ---------- 14. 汇总 ----------
 Write-Head "回归汇总"
 $summary | ForEach-Object { Write-Host "  $_" }
 Write-Host ''
