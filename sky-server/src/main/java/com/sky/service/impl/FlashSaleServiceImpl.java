@@ -12,6 +12,7 @@ import com.sky.mapper.ProductMapper;
 import com.sky.service.FlashSaleService;
 import com.sky.service.TradeOrderService;
 import com.sky.utils.FlashSaleStockUtil;
+import com.sky.vo.FlashSaleAdminVO;
 import com.sky.vo.FlashSaleVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -207,8 +208,135 @@ public class FlashSaleServiceImpl implements FlashSaleService {
      */
     @Override
     public List<FlashSaleRecord> listMyRecord() {
-        log.info("你好呀后世的君子们");
         return flashSaleRecordMapper.listMySuccess(BaseContext.getCurrentId());
+    }
+
+    // ==========================================================================
+    // 管理端-捡漏活动管理（S4-3）
+    //   listForAdmin 已写好；下面两个方法是【留给你的练习】
+    // ==========================================================================
+
+    /**
+     * 【管理端】捡漏活动列表（已写好）
+     *
+     * SQL 只查数据库，Redis 库存要单独补 —— 因为库存本来就不在数据库里（这也是"两套系统"的体现）。
+     */
+    @Override
+    public List<FlashSaleAdminVO> listForAdmin() {
+        List<FlashSaleAdminVO> list = productMapper.listFlashSaleForAdmin();
+        for (FlashSaleAdminVO vo : list) {
+            vo.setRedisStock(stockUtil.getStock(vo.getProductId()));
+            vo.setStatusName(productStatusName(vo.getStatus()));
+        }
+        return list;
+    }
+
+    /**
+     * 【管理端】重置某件捡漏商品的 Redis 库存
+     */
+    @Override
+    public void resetStock(Long productId) {
+        // ================= 你的部分：填空 A1 ~ A4 =================
+        //
+        // 【A1】商品必须存在
+        //   Product product = productMapper.getById(productId);
+        //   · product == null → throw new BaseException(MessageConstant.PRODUCT_NOT_FOUND)
+        Product product = productMapper.getById(productId);
+        if(product == null){
+            // 提示语要写"发生了什么"（商品不存在），不要写"应该怎样"（商品必须存在）
+            // —— 后者读起来像需求文档，用户看到会愣一下
+            throw new BaseException("商品不存在");
+        }
+        // 【A2】必须是捡漏商品
+        //   · !ProductConstant.FLASH_SALE.equals(product.getIsFlashSale())
+        //        → throw new BaseException("该商品不是捡漏商品")
+        if(!ProductConstant.FLASH_SALE.equals(product.getIsFlashSale())){
+            throw new BaseException("该商品不是捡漏商品");
+        }
+        // 【A3】⭐ 关键守卫：商品必须还在"在售"状态
+        //   · !ProductConstant.ON_SALE.equals(product.getStatus())
+        //        → throw new BaseException("商品当前不是'在售'状态（可能已被抢走或下架），重置库存没有意义")
+        //   ⚠️ 为什么：给一件已经卖掉的商品"重置库存"，等于让 Redis 说"还有货"，
+        //      而数据库里它是"交易中" —— 虽然数据库的状态校验会兜住（第①步就拦了），
+        //      但那属于"靠别人兜底"。**库存应该自己符合事实**，别指望下游替你擦屁股。
+        if(!ProductConstant.ON_SALE.equals(product.getStatus())){
+            throw new BaseException("商品不是在售状态（可能是已经被抢走或者下架）");
+        }
+        // 【A4】清掉库存 key（下次抢购会按初始库存重建）+ 留痕日志
+        //   stockUtil.clear(productId);
+        //   log.warn("管理端重置捡漏库存：productId={}, title={}", productId, product.getTitle());
+        //
+        // =======================================================
+        stockUtil.clear(productId);
+        log.warn("管理端重置捡漏库存：productId={},title={}",productId,product.getTitle());
+    }
+
+    /**
+     * 【管理端】提前结束捡漏活动
+     */
+    @Override
+    public void endActivity(Long productId) {
+        // ================= 你的部分：填空 B1 ~ B4 =================
+        //
+        // 【B1】商品必须存在（同 A1）
+        Product product = productMapper.getById(productId);
+        if(product == null){
+            throw new BaseException("商品不存在");
+        }
+        // 【B2】必须是捡漏商品（同 A2）
+        //   ⚠️ 为什么这里也要判：如果他本来就是普通商品，你还"结束活动"，
+        //      会让人误以为这个操作有别的副作用，语义不清。
+        // ┌── 【错题标记 #29】Integer 用 == 比较（第 5 次了！）─────────────────
+        // │ 你当时写的：if (!(product.getIsFlashSale() == 1))
+        // │ 为什么错：getIsFlashSale() 是 Integer，和字面量 1 用 == 比较会【自动拆箱】，
+        // │   而且它和常量 1 比的是值（拆箱后），虽然这次能跑对，
+        // │   但——它依赖"拆箱成 int 再比"这个隐含行为，一旦哪天字段变成 Long/null 就崩。
+        // │   更要命的是：你写到第 5 次了（抢购状态 → 议价 → 跑腿取消 → 投诉 → 现在）。
+        // │ 改法：常量在前 + equals，和你在 A2 里写的一模一样：
+        // │   !ProductConstant.FLASH_SALE.equals(product.getIsFlashSale())
+        // │ 强记：**看到包装类型用 == / != / 和数字比，一律换成 equals 或先拆箱判空。**
+        // └──────────────────────────────────────────────────────────────
+        if(!ProductConstant.FLASH_SALE.equals(product.getIsFlashSale())){
+            throw new BaseException("该商品本来就是普通商品，不需要结束");
+        }
+        // 【B3】把 is_flash_sale 改回 0（变回普通商品）
+        //   productMapper.updateById(Product.builder()
+        //           .id(productId)
+        //           .isFlashSale(0)
+        //           .updateTime(LocalDateTime.now())
+        //           .build());
+        //   提示：updateById 是【动态更新】，只会改你传了值的字段，
+        //        不会把标题、价格、状态这些字段一起刷掉 ✓
+        productMapper.updateById(Product.builder()
+                .id(productId)
+                .isFlashSale(0)
+                .updateTime(LocalDateTime.now())
+                .build());
+        // 【B4】清掉 Redis 库存 + 留痕日志
+        //   stockUtil.clear(productId);
+        //   log.warn("管理端结束捡漏活动：productId={}, title={}", productId, product.getTitle());
+        //   ⚠️ 注意：如果这件商品已经被抢走了（status = 交易中），
+        //      结束活动【不影响已有的订单】—— 活动归活动、订单归订单，两者别混。
+        //
+        // =======================================================
+        stockUtil.clear(productId);
+        // 管理员操作必须留痕（含操作内容，便于事后审计"谁在什么时候结束了哪场活动"）
+        log.warn("管理端结束捡漏活动：productId={}, title={}（已变回普通商品并清空库存）",
+                productId, product.getTitle());
+    }
+
+    /** 商品状态 → 中文（管理端列表展示用） */
+    private String productStatusName(Integer status) {
+        if (ProductConstant.ON_SALE.equals(status)) {
+            return "在售";
+        }
+        if (ProductConstant.IN_TRADE.equals(status)) {
+            return "交易中";
+        }
+        if (ProductConstant.SOLD_OUT.equals(status)) {
+            return "已售罄";
+        }
+        return "已下架";
     }
 
 }

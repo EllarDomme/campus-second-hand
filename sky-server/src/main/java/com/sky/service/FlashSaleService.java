@@ -1,6 +1,7 @@
 package com.sky.service;
 
 import com.sky.entity.FlashSaleRecord;
+import com.sky.vo.FlashSaleAdminVO;
 import com.sky.vo.FlashSaleVO;
 
 import java.util.List;
@@ -34,5 +35,25 @@ public interface FlashSaleService {
 
     /** 我的抢购记录（只返回抢到过的） */
     List<FlashSaleRecord> listMyRecord();
+
+    // ==================== 管理端-捡漏活动管理（S4-3）====================
+
+    /**
+     * 【管理端】捡漏活动列表
+     * 比用户端多三样：Redis 剩余库存、参与人数、抢到人数
+     */
+    List<FlashSaleAdminVO> listForAdmin();
+
+    /**
+     * 【管理端】重置某件捡漏商品的 Redis 库存
+     * 用途：活动结束 / 商品重新上架 / 回归测试准备数据（原来是个调试接口，现在正式化）
+     */
+    void resetStock(Long productId);
+
+    /**
+     * 【管理端】提前结束捡漏活动
+     * 效果：商品变回普通商品（is_flash_sale = 0），并清掉 Redis 库存
+     */
+    void endActivity(Long productId);
 
 }

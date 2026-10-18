@@ -122,4 +122,26 @@
         order by p.flash_start_time asc, p.id desc
     </select>
 
+    <!--
+        管理端-捡漏活动列表（S4-3）
+        和用户端 listFlashSale 的区别：
+          · 不限制商品状态（已抢走/已下架也要给管理员看到）
+          · 带出"参与人数"和"抢到人数" —— 管理员靠这两个数字判断活动热度
+          · 排序：进行中/在售的排前面，方便管理员优先处理
+    -->
+    <select id="listFlashSaleForAdmin" resultType="com.sky.vo.FlashSaleAdminVO">
+        select p.id                 productId,
+               p.title,
+               p.price,
+               p.flash_start_time   flashStartTime,
+               p.status,
+               u.nickname           sellerNickname,
+               (select count(*) from flash_sale_record r where r.product_id = p.id) participants,
+               (select count(*) from flash_sale_record r where r.product_id = p.id and r.is_success = 1) grabbed
+        from product p
+        left join user u on p.seller_id = u.id
+        where p.is_flash_sale = 1
+        order by p.status asc, p.flash_start_time asc, p.id desc
+    </select>
+
 </mapper>

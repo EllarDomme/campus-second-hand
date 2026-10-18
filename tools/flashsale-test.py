@@ -192,6 +192,40 @@ check("T13", "小张抢商品3（库存应已随取消恢复 → 能抢到）", 
 z_rec = call("GET", "/user/flashSale/record", {"authentication": zhang}).get("data") or []
 check_true("T14", "小张的抢购记录里出现了商品3", any(x.get("productId") == 3 for x in z_rec))
 
+# ---------- 六、管理端：捡漏活动管理（S4-3）----------
+print("\n===== 六、管理端-捡漏活动管理（6 项）=====")
+admin = login_admin()
+Ha = {"token": admin}
+
+lst = call("GET", "/admin/flashSale/list", Ha).get("data") or []
+check_true("T15", "活动列表能查到捡漏商品，且带库存/参与人数",
+           len(lst) >= 1 and all("participants" in x for x in lst),
+           "（%d 件：%s）" % (len(lst), [(x.get("productId"), x.get("statusName"), x.get("redisStock")) for x in lst[:3]]))
+
+# 对"非捡漏商品"重置库存 → 应该被拒（商品6 是普通商品）
+check("T16", "对普通商品（商品6）重置库存", "该商品不是捡漏商品",
+      call("POST", "/admin/flashSale/resetStock/6", Ha))
+
+# 对"已经卖掉(交易中)"的捡漏商品重置库存 → 应该被拒
+#   商品2 在并发压测里已经被抢走（status=交易中）
+check("T17", "对已卖掉的捡漏商品（商品2）重置库存", "不是在售状态",
+      call("POST", "/admin/flashSale/resetStock/2", Ha))
+
+# 对正常在售的捡漏商品重置库存 → 应该成功
+check("T18", "对在售的捡漏商品（商品1）重置库存", "code=1",
+      call("POST", "/admin/flashSale/resetStock/1", Ha))
+
+# 结束活动：商品1 变回普通商品
+check("T19", "结束商品1 的捡漏活动", "code=1",
+      call("PUT", "/admin/flashSale/end/1", Ha))
+lst2 = call("GET", "/admin/flashSale/list", Ha).get("data") or []
+check_true("T20", "结束后的商品1 已不在捡漏活动列表里",
+           not any(x.get("productId") == 1 for x in lst2),
+           "（列表里现在是 %s）" % [x.get("productId") for x in lst2])
+
+check("T21", "对【已经不是捡漏】的商品1 再次结束", "本来就是普通商品",
+      call("PUT", "/admin/flashSale/end/1", Ha))
+
 total = passed + failed
 print("\n" + "=" * 60)
 print("捡漏抢购回归：通过 %d / %d" % (passed, total))

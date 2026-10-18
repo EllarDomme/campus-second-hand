@@ -5,6 +5,7 @@ import com.sky.annotation.AutoFill;
 import com.sky.dto.ProductPageQueryDTO;
 import com.sky.entity.Product;
 import com.sky.enumeration.OperationType;
+import com.sky.vo.FlashSaleAdminVO;
 import com.sky.vo.FlashSaleVO;
 import com.sky.vo.ProductVO;
 import org.apache.ibatis.annotations.Delete;
@@ -98,5 +99,13 @@ public interface ProductMapper {
      * SQL 写在 ProductMapper.xml
      */
     List<FlashSaleVO> listFlashSale();
+
+    /**
+     * 管理端-捡漏活动列表（S4-3）
+     *
+     * 和用户端的区别：不过滤商品状态（已抢走、已下架的也要给管理员看到），
+     * 并带出参与人数 / 抢到人数（子查询）。
+     */
+    List<FlashSaleAdminVO> listFlashSaleForAdmin();
 
 }

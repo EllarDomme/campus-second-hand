@@ -67,7 +67,25 @@ if (Test-Path -LiteralPath $yml) {
 }
 $mysqlExe = 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe'
 
-# ---------- 3. 提醒：class 是否比源码旧（这是最容易踩的坑）----------
+# ---------- 3. Mapper XML 结构体检（0.1 秒，比等启动失败快得多）----------
+# 因为 XML 写坏（注释里有 -- / select 没闭合）白折腾过两次，加个自检。
+$xmlDir = Join-Path $root 'sky-server\src\main\resources\mapper'
+$xmlBad = @()
+Get-ChildItem $xmlDir -Filter *.xml -ErrorAction SilentlyContinue | ForEach-Object {
+    $text = Get-Content -LiteralPath $_.FullName -Raw
+    $open  = ([regex]::Matches($text, '<select ')).Count
+    $close = ([regex]::Matches($text, '</select>')).Count
+    $badC  = ([regex]::Matches($text, '(?s)<!--(.*?)-->') | Where-Object { $_.Groups[1].Value -match '\-\-' }).Count
+    if ($open -ne $close) { $xmlBad += "$($_.Name): select $open/$close 不匹配" }
+    if ($badC -gt 0)      { $xmlBad += "$($_.Name): $badC 个注释里有连续减号" }
+}
+if ($xmlBad.Count -gt 0) {
+    Write-Host "❌ Mapper XML 结构有问题（Spring 会起不来）：" -ForegroundColor Red
+    $xmlBad | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+    exit 1
+}
+
+# ---------- 4. 提醒：class 是否比源码旧（这是最容易踩的坑）----------
 $srcNewest = Get-ChildItem (Join-Path $root 'sky-server\src') -Recurse -File -Include *.java, *.xml |
              Sort-Object LastWriteTime -Descending | Select-Object -First 1
 $clsNewest = Get-ChildItem (Join-Path $root 'sky-server\target\classes') -Recurse -File -ErrorAction SilentlyContinue |
