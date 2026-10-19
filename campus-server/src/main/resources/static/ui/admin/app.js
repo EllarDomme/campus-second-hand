@@ -444,6 +444,104 @@ function imgCell(images, title) {
     return '<div class="cell-main">' + thumb + '<div class="t">' + esc(title || '(无标题)') + '</div></div>';
 }
 
+/**
+ * images 字段 → 图片地址数组
+ * 兼容两种格式：JSON 数组字符串（库里的老数据）/ 逗号分隔（早期前端写的）
+ * 只按逗号拆会把 JSON 数组拆坏，导致图片全部加载失败 —— 这个坑踩过。
+ */
+function splitImages(images) {
+    if (!images) return [];
+    const raw = String(images).trim();
+    let arr = null;
+    if (raw.startsWith('[')) {
+        try { arr = JSON.parse(raw); } catch (e) { arr = null; }
+    }
+    if (!Array.isArray(arr)) arr = raw.split(',');
+    return arr.map(x => String(x).trim().replace(/^["'\s]+|["'\s]+$/g, ''))
+        .filter(Boolean)
+        .map(x => /^https?:/.test(x) ? x : '/' + x.replace(/^\/+/, ''));
+}
+
+/**
+ * 商品详情抽屉（审核用）
+ * 为什么是抽屉而不是弹窗：审核要看的东西多（多图 + 长描述 + 卖家信息），
+ * 抽屉能占满右侧高度，滚动更舒服；而且关掉后列表还在原位置。
+ */
+async function openProductDrawer(id, onDone) {
+    let p;
+    try {
+        p = await api('GET', '/admin/product/' + id, null, { quiet: true });
+    } catch (e) {
+        toast(e.message || '加载失败', 'err');
+        return;
+    }
+    const imgs = splitImages(p.images);
+
+    const mask = document.createElement('div');
+    mask.className = 'drawer-mask';
+    mask.innerHTML =
+        '<div class="drawer">' +
+        '  <div class="d-head"><span>商品详情 · #' + p.id + '</span>' +
+        '    <button class="x" data-close>&times;</button></div>' +
+        '  <div class="d-body">' +
+
+        (imgs.length
+            ? '<div class="img-grid">' + imgs.map(src =>
+                '<img src="' + esc(src) + '" onerror="this.style.opacity=.2">').join('') + '</div>'
+            : '<div class="desc-box" style="text-align:center;color:#94a3b8">卖家没有上传图片</div>') +
+
+        '    <div style="margin:16px 0 10px;font-size:17px;font-weight:600">' + esc(p.title || '') + '</div>' +
+        '    <div style="color:#e11d48;font-size:22px;font-weight:700;margin-bottom:14px">' + money(p.price) + '</div>' +
+
+        '    <dl class="kv" style="margin:0 0 16px">' +
+        '      <dt>分类</dt><dd>' + esc(p.categoryName || '-') + '</dd>' +
+        '      <dt>成色</dt><dd>' + (p.conditionLevel ? badge(({ 1: '全新', 2: '几乎全新', 3: '轻微使用', 4: '明显使用', 5: '有瑕疵' })[p.conditionLevel] || ('成色' + p.conditionLevel), 'gray') : '-') + '</dd>' +
+        '      <dt>卖家</dt><dd>' + esc(p.sellerNickname || ('#' + p.sellerId)) + '</dd>' +
+        '      <dt>商品状态</dt><dd>' + tag('productStatus', p.status) + '</dd>' +
+        '      <dt>审核状态</dt><dd>' + tag('auditStatus', p.auditStatus) + '</dd>' +
+        '      <dt>热度</dt><dd>' + (p.viewCount || 0) + ' 次浏览 · ' + (p.favoriteCount || 0) + ' 人收藏</dd>' +
+        '      <dt>捡漏</dt><dd>' + (p.isFlashSale === 1
+            ? badge('是', 'orange') + ' <span class="muted">开抢 ' + fmtTime(p.flashStartTime) + '</span>'
+            : '<span class="muted">否</span>') + '</dd>' +
+        (p.auditNote ? '      <dt>驳回原因</dt><dd style="color:#dc2626">' + esc(p.auditNote) + '</dd>' : '') +
+        '    </dl>' +
+
+        '    <div style="font-size:12.5px;color:#64748b;margin-bottom:6px">商品描述</div>' +
+        '    <div class="desc-box">' + (p.description ? esc(p.description) : '<span class="muted">卖家没有填写描述</span>') + '</div>' +
+
+        (p.auditStatus === 0
+            ? '<div style="display:flex;gap:9px;margin-top:20px">' +
+              '  <button class="btn danger" style="flex:1;height:40px" id="d-reject">驳回</button>' +
+              '  <button class="btn primary" style="flex:1;height:40px" id="d-pass">通过审核</button>' +
+              '</div>'
+            : '<div class="hint muted" style="margin-top:18px">这件商品已经处理过了（' +
+              (p.auditStatus === 1 ? '已通过' : '已驳回') + '）</div>') +
+
+        '  </div>' +
+        '</div>';
+
+    document.body.appendChild(mask);
+    const close = () => { mask.remove(); if (onDone) onDone(); };
+    mask.querySelector('[data-close]').onclick = () => { mask.remove(); };
+    mask.onclick = (e) => { if (e.target === mask) { mask.remove(); } };
+
+    const passBtn = mask.querySelector('#d-pass');
+    if (passBtn) passBtn.onclick = async () => {
+        await api('POST', '/admin/product/audit' + qs({ id: p.id, auditStatus: 1 }));
+        toast('已通过审核', 'ok');
+        close();
+    };
+
+    const rejectBtn = mask.querySelector('#d-reject');
+    if (rejectBtn) rejectBtn.onclick = async () => {
+        const note = prompt('驳回原因（会展示给卖家，必填）：');
+        if (!note || !note.trim()) return toast('驳回必须填写原因', 'err');
+        await api('POST', '/admin/product/audit' + qs({ id: p.id, auditStatus: 2, auditNote: note.trim() }));
+        toast('已驳回', 'ok');
+        close();
+    };
+}
+
 async function loadAudit() {
     const box = document.getElementById('audit-table');
     if (!box) return;
@@ -466,10 +564,11 @@ async function loadAudit() {
             '<td>' + tag('auditStatus', p.auditStatus) +
             (p.auditNote ? '<div class="muted" style="font-size:11.5px;margin-top:3px">' + esc(p.auditNote) + '</div>' : '') + '</td>' +
             '<td class="td-actions">' +
+            '<button class="btn sm" data-act="detail" data-id="' + p.id + '">详情</button>' +
             (p.auditStatus === 0
                 ? '<button class="btn sm primary" data-act="pass" data-id="' + p.id + '">通过</button>' +
                   '<button class="btn sm danger" data-act="reject" data-id="' + p.id + '">驳回</button>'
-                : '<span class="muted">已处理</span>') +
+                : '') +
             '</td></tr>'
         ).join('') : emptyRow(6, '没有符合条件的商品')) +
         '</tbody></table></div>' +
@@ -481,7 +580,11 @@ async function loadAudit() {
     });
     box.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
         const id = b.getAttribute('data-id');
-        if (b.getAttribute('data-act') === 'pass') {
+        const act = b.getAttribute('data-act');
+        if (act === 'detail') {
+            return openProductDrawer(id, loadAudit);
+        }
+        if (act === 'pass') {
             await api('POST', '/admin/product/audit' + qs({ id: id, auditStatus: 1 }));
             toast('已通过审核', 'ok');
             return loadAudit();

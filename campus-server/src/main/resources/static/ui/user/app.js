@@ -248,10 +248,60 @@ async function loadGoods() {
 }
 
 function firstImg(images) {
-    if (!images) return '';
-    const f = String(images).split(',')[0].trim();
-    if (!f) return '';
-    return /^https?:/.test(f) ? f : '/' + f.replace(/^\/+/, '');
+    const list = imgList(images);
+    return list.length ? list[0] : '';
+}
+
+/**
+ * images 字段 → 图片地址数组
+ *
+ * ⚠️ 这里要兼容两种历史格式（踩过坑）：
+ *   ① JSON 数组字符串： ["https://a.jpg","https://b.jpg"]   ← 数据库里的老数据 / 建表注释约定的格式
+ *   ② 逗号分隔：        https://a.jpg,https://b.jpg          ← 早期前端发布时写的格式
+ * 只按逗号拆的话，JSON 数组会被拆成 `["https://a.jpg"` 这种残缺串，图片全部加载失败。
+ * 所以：先尝试 JSON.parse，失败再退回逗号拆分。
+ */
+function imgList(images) {
+    if (!images) return [];
+    const raw = String(images).trim();
+    let arr = null;
+    if (raw.startsWith('[')) {
+        try { arr = JSON.parse(raw); } catch (e) { arr = null; }
+    }
+    if (!Array.isArray(arr)) {
+        arr = raw.split(',');
+    }
+    return arr.map(x => String(x).trim().replace(/^["'\s]+|["'\s]+$/g, ''))
+        .filter(Boolean)
+        .map(x => /^https?:/.test(x) ? x : '/' + x.replace(/^\/+/, ''));
+}
+
+/** 多图轮播（横滑 + 指示点）。只有一张图时不显示指示点 */
+function carouselHTML(images) {
+    const list = imgList(images);
+    if (!list.length) {
+        return '<div class="carousel"><div class="slide">' + icon('box') + '</div></div>';
+    }
+    return '<div class="carousel">' +
+        '<div class="track" id="car-track">' +
+        list.map(src => '<div class="slide"><img src="' + esc(src) + '" onerror="this.style.display=\'none\'"></div>').join('') +
+        '</div>' +
+        (list.length > 1
+            ? '<div class="dots" id="car-dots">' + list.map((_, i) => '<i' + (i === 0 ? ' class="on"' : '') + '></i>').join('') + '</div>'
+            : '') +
+        '</div>';
+}
+
+/** 绑定轮播的指示点跟随（横滑时高亮当前图） */
+function bindCarousel() {
+    const track = document.getElementById('car-track');
+    const dots = document.getElementById('car-dots');
+    if (!track || !dots) return;
+    const marks = Array.from(dots.children);
+    track.onscroll = () => {
+        const idx = Math.round(track.scrollLeft / track.clientWidth);
+        marks.forEach((m, i) => { m.className = i === idx ? 'on' : ''; });
+    };
 }
 
 function goodsCard(p) {
@@ -340,7 +390,7 @@ async function viewDetail(id) {
     app.innerHTML =
         topBar('商品详情', true) +
         '<div class="h5-body">' +
-        '  <div class="detail-pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '📦') + '</div>' +
+        '  ' + carouselHTML(p.images) +
         '  <div class="detail-price"><small>¥</small>' + Number(p.price || 0).toFixed(2) + '</div>' +
         '  <div class="detail-title">' + esc(p.title || '') + '</div>' +
         '  <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
@@ -383,6 +433,8 @@ async function viewDetail(id) {
                 '<div style="font-size:13px;color:#5a6472">' + esc(r.content || '（未填写内容）') + '</div></div>').join('')
             : '<div class="h5-empty" style="padding:16px 0">还没有人评价</div>');
     } catch (e) { setHTML('revs', ''); }
+
+    bindCarousel();   // 多图轮播：让指示点跟着滑动走
 
     const favBtn = document.getElementById('fav');
     if (favBtn) {
@@ -945,7 +997,9 @@ async function viewPublish(pid) {
     document.getElementById('p-save').onclick = async () => {
         const title = document.getElementById('p-title').value.trim();
         const price = Number(document.getElementById('p-price').value);
-        const images = document.getElementById('p-imgs').value.split('\n').map(x => x.trim()).filter(Boolean).join(',');
+        const images = document.getElementById('p-imgs').value.split('\n').map(x => x.trim()).filter(Boolean);
+        // 存 JSON 数组字符串，和数据库里既有数据的格式保持一致（前端 imgList 两种都认）
+        const imagesStr = images.length ? JSON.stringify(images) : '';
         const isFlash = document.getElementById('p-flash').checked ? 1 : 0;
         const ft = document.getElementById('p-flashtime').value;
         if (!title) return toast('请填写标题', 'err');
@@ -955,7 +1009,7 @@ async function viewPublish(pid) {
             categoryId: Number(document.getElementById('p-cat').value) || null,
             title: title,
             price: price,
-            images: images,
+            images: imagesStr,
             description: document.getElementById('p-desc').value.trim(),
             conditionLevel: Number(document.getElementById('p-cond').value),
             isFlashSale: isFlash,
@@ -1136,7 +1190,10 @@ function openComplaint(opts) {
             complaintType: Number(mask.querySelector('#c-type').value),
             complaintReason: Number(mask.querySelector('#c-reason').value),
             content: content,
-            images: mask.querySelector('#c-imgs').value.split('\n').map(x => x.trim()).filter(Boolean).join(','),
+            images: (function () {
+                const list = mask.querySelector('#c-imgs').value.split('\n').map(x => x.trim()).filter(Boolean);
+                return list.length ? JSON.stringify(list) : '';
+            })(),
             productId: opts.productId || null,
             orderId: opts.orderId || null
         };
