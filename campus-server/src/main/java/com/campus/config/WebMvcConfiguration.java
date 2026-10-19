@@ -99,6 +99,14 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
         log.info("开始设置静态资源映射");
         registry.addResourceHandler("/doc.html").addResourceLocations("classpath:/META-INF/resources/");
         registry.addResourceHandler("/webjars/**").addResourceLocations("classpath:/META-INF/resources/webjars/");
+
+        // 前端页面（管理后台 + 用户端 H5）
+        // ⚠️ 为什么必须手写这一段：本类继承了 WebMvcConfigurationSupport，
+        //    而 Spring Boot 的静态资源自动配置（classpath:/static/）会因为
+        //    "容器里已经有一个 WebMvcConfigurationSupport 子类" 而整体失效。
+        //    这也是放 /ui/** 而不是 /admin/** 的原因 —— /admin/** 会被 JWT 拦截器拦掉。
+        registry.addResourceHandler("/ui/**").addResourceLocations("classpath:/static/ui/");
+        registry.addResourceHandler("/ui").addResourceLocations("classpath:/static/ui/");
     }
 
     /**

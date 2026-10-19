@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>校园二手交易平台</title>
+    <link rel="stylesheet" href="common.css">
+    <style>
+        .landing { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 18px; }
+        .landing h1 { font-size: 26px; margin: 0 0 8px; }
+        .landing .lead { color: var(--ink-3); font-size: 13.5px; margin: 0 0 34px; text-align: center; line-height: 1.8; }
+        .entries { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; width: 100%; max-width: 660px; }
+        .entry { background: #fff; border-radius: 14px; padding: 24px 22px; box-shadow: var(--shadow); border: 1px solid var(--line); transition: all .18s; }
+        .entry:hover { transform: translateY(-3px); box-shadow: 0 10px 28px rgba(20,30,60,.12); }
+        .entry .t { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+        .entry .d { color: var(--ink-3); font-size: 12.5px; line-height: 1.8; margin-bottom: 16px; min-height: 44px; }
+        .entry.disabled { opacity: .62; }
+        .entry.disabled:hover { transform: none; box-shadow: var(--shadow); }
+        .foot-note { margin-top: 34px; color: var(--ink-3); font-size: 12px; text-align: center; line-height: 1.9; }
+    </style>
+</head>
+<body>
+<div class="landing">
+    <h1>校园二手交易平台</h1>
+    <p class="lead">一个由学生自己搭的二手交易平台 · 支持议价 / 限时捡漏 / 私信 / 校园跑腿 / 信用分 / 投诉裁决</p>
+
+    <div class="entries">
+        <div class="entry">
+            <div class="t">管理后台</div>
+            <div class="d">数据看板、用户管理、商品审核、捡漏活动、跑腿单、投诉工单、评价管理</div>
+            <a class="btn primary block" href="admin/index.html">进入管理后台 →</a>
+        </div>
+        <div class="entry">
+            <div class="t">用户端 H5</div>
+            <div class="d">浏览商品、议价、抢捡漏、下单支付、私信、叫跑腿、看信用分</div>
+            <a class="btn block" href="user/index.html">进入用户端 →</a>
+        </div>
+    </div>
+
+    <div class="foot-note">
+        管理端账号 <b>zhangsan</b> / <b>123456</b>　·　用户端支持"测试登录"（不需要微信）<br>
+        接口文档（在线调试）：<a href="http://localhost:8080/doc.html" target="_blank">/doc.html</a>
+    </div>
+</div>
+</body>
+</html>
