@@ -10,3 +10,6 @@ campus-server/src/main/resources/application-dev.yml
 
 # 本地启动脚本生成的运行时 classpath 缓存（run-dev.ps1 自动重建）
 .dsh-cp-server.txt
+
+# 用户上传的图片（本地存储，不进仓库）
+uploads/

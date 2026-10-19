@@ -954,6 +954,20 @@ async function loadRunner(which) {
     });
 }
 
+/* ---------- 图片上传（multipart，不能用 JSON 那套封装） ---------- */
+async function uploadImage(file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    const headers = {};
+    if (U.token()) headers['authentication'] = U.token();
+    // ⚠️ 不要手动设 Content-Type —— 浏览器要自己带 boundary
+    const res = await fetch('/user/upload', { method: 'POST', headers, body: fd });
+    if (res.status === 401) { U.clear(); location.hash = '#/login'; renderAll(); throw new Error('unauthorized'); }
+    const data = await res.json();
+    if (data.code !== 1) throw new Error(data.msg || '上传失败');
+    return data.data;   // 形如 /upload/2026/10/xxxx.png
+}
+
 /* ======================= 发布 / 编辑商品 ======================= */
 async function viewPublish(pid) {
     const isEdit = !!pid;
@@ -975,10 +989,11 @@ async function viewPublish(pid) {
         [1, 2, 3, 4, 5].map(l => '<option value="' + l + '"' + (Number(p.conditionLevel) === l ? ' selected' : '') + '>' + conditionText(l) + '</option>').join('') +
         '  </select></div>' +
         '  <div class="field"><label>商品描述</label><textarea id="p-desc" placeholder="用法说明、有没有笔记、哪里有磨损…">' + esc(p.description || '') + '</textarea></div>' +
-        '  <div class="field"><label>图片地址（每行一个，可留空）</label>' +
-        '    <textarea id="p-imgs" placeholder="https://example.com/1.jpg&#10;https://example.com/2.jpg">' +
-        esc(String(p.images || '').split(',').filter(x => x.trim()).join('\n')) + '</textarea>' +
-        '    <div class="hint" style="font-size:11.5px;color:#8f98a6">没有图床可以先留空，页面上会显示占位图</div></div>' +
+        '  <div class="field"><label>商品图片（最多 6 张）</label>' +
+        '    <div class="up-grid" id="up-grid"></div>' +
+        '    <input type="file" id="up-input" accept="image/*" multiple hidden>' +
+        '    <button class="btn block" id="up-btn" type="button" style="margin-top:9px">📷 拍照 / 从相册选择</button>' +
+        '    <div class="hint" style="font-size:11.5px;color:#8f98a6">支持 jpg / png / webp，单张不超过 5MB；第一张会作为封面</div></div>' +
         '  <div class="field"><label style="display:flex;align-items:center;gap:8px">' +
         '    <input id="p-flash" type="checkbox" style="width:auto"' + (p.isFlashSale === 1 ? ' checked' : '') + '> 同时参加限时捡漏</label>' +
         '  </div>' +
@@ -994,12 +1009,60 @@ async function viewPublish(pid) {
         document.getElementById('flash-box').style.display = e.target.checked ? '' : 'none';
     };
 
+    // ---------- 图片上传 ----------
+    // pubImages 是"已上传成功的图片地址数组"，提交时 JSON.stringify 后存库
+    let pubImages = imgList(p.images);
+
+    const renderUpGrid = () => {
+        const grid = document.getElementById('up-grid');
+        if (!grid) return;
+        grid.innerHTML = pubImages.map((src, i) =>
+            '<div class="up-item">' +
+            '<img src="' + esc(src) + '" onerror="this.style.opacity=.25">' +
+            (i === 0 ? '<span class="up-cover">封面</span>' : '') +
+            '<button type="button" class="up-del" data-del="' + i + '">×</button>' +
+            '</div>').join('') +
+            (pubImages.length >= 6 ? '' : '<div class="up-item up-empty">＋</div>');
+        grid.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
+            pubImages.splice(Number(b.getAttribute('data-del')), 1);
+            renderUpGrid();
+        });
+    };
+
+    const upInput = document.getElementById('up-input');
+    document.getElementById('up-btn').onclick = () => upInput.click();
+
+    upInput.onchange = async () => {
+        const files = Array.from(upInput.files || []);
+        upInput.value = '';                       // 允许再次选同一个文件
+        const room = 6 - pubImages.length;
+        if (room <= 0) return toast('最多 6 张图片', 'err');
+        const picked = files.slice(0, room);
+        const btn = document.getElementById('up-btn');
+        btn.disabled = true;
+        let ok = 0;
+        for (let i = 0; i < picked.length; i++) {
+            btn.textContent = '上传中 ' + (i + 1) + '/' + picked.length + ' …';
+            try {
+                const url = await uploadImage(picked[i]);
+                pubImages.push(url);
+                ok++;
+                renderUpGrid();
+            } catch (e) {
+                toast(e.message || '上传失败', 'err');
+            }
+        }
+        btn.disabled = false;
+        btn.textContent = '📷 拍照 / 从相册选择';
+        if (ok) toast('已上传 ' + ok + ' 张', 'ok');
+    };
+
+    renderUpGrid();
+
     document.getElementById('p-save').onclick = async () => {
         const title = document.getElementById('p-title').value.trim();
         const price = Number(document.getElementById('p-price').value);
-        const images = document.getElementById('p-imgs').value.split('\n').map(x => x.trim()).filter(Boolean);
-        // 存 JSON 数组字符串，和数据库里既有数据的格式保持一致（前端 imgList 两种都认）
-        const imagesStr = images.length ? JSON.stringify(images) : '';
+        const imagesStr = pubImages.length ? JSON.stringify(pubImages) : '';
         const isFlash = document.getElementById('p-flash').checked ? 1 : 0;
         const ft = document.getElementById('p-flashtime').value;
         if (!title) return toast('请填写标题', 'err');

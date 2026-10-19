@@ -10,6 +10,11 @@ spring:
     scheduling:
       pool:
         size: 5
+  # 上传限制：Spring 默认单文件只有 1MB，随便一张手机照片就超了
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
   datasource:
     druid:
       driver-class-name: ${campus.datasource.driver-class-name}

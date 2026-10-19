@@ -107,6 +107,12 @@ public class WebMvcConfiguration extends WebMvcConfigurationSupport {
         //    这也是放 /ui/** 而不是 /admin/** 的原因 —— /admin/** 会被 JWT 拦截器拦掉。
         registry.addResourceHandler("/ui/**").addResourceLocations("classpath:/static/ui/");
         registry.addResourceHandler("/ui").addResourceLocations("classpath:/static/ui/");
+
+        // 用户上传的图片（存本地磁盘，不在 jar 里，所以要用 file: 协议）
+        // 路径必须和 LocalStorageUtil.rootDir() 一致，且结尾的斜杠不能省 —— 少了它映射会失效
+        String uploadDir = new java.io.File(System.getProperty("user.dir"), "uploads")
+                .getAbsolutePath() + java.io.File.separator;
+        registry.addResourceHandler("/upload/**").addResourceLocations("file:" + uploadDir);
     }
 
     /**
