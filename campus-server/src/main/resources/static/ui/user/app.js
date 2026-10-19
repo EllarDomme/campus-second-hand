@@ -273,6 +273,50 @@ function conditionText(lv) {
     return ({ 1: '全新', 2: '几乎全新', 3: '轻微使用', 4: '明显使用', 5: '有瑕疵' })[lv] || ('成色' + lv);
 }
 
+/* ---------- 时间小工具：倒计时 / 开抢时间 ---------- */
+function parseTime(v) {
+    if (!v) return null;
+    const s = String(v).replace('T', ' ').replace(/-/g, '/');
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+/** 距离某个时间还有多久（中文，粒度到分钟） */
+function untilText(target) {
+    const t = parseTime(target);
+    if (!t) return '';
+    const ms = t.getTime() - Date.now();
+    if (ms <= 0) return '';
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return '不到 1 分钟';
+    if (min < 60) return min + ' 分钟';
+    const hour = Math.floor(min / 60);
+    if (hour < 24) return hour + ' 小时' + (min % 60 ? (min % 60) + ' 分钟' : '');
+    return Math.floor(hour / 24) + ' 天' + (hour % 24 ? (hour % 24) + ' 小时' : '');
+}
+
+/** 捡漏开抢状态：未开始 / 已开抢 */
+function flashState(f) {
+    const t = parseTime(f.flashStartTime);
+    if (!t) return { started: true, text: '已开抢', cls: 'green' };
+    if (t.getTime() <= Date.now()) return { started: true, text: '已开抢', cls: 'green' };
+    return { started: false, text: '未开始', cls: 'orange' };
+}
+
+/** 详情页的捡漏横幅：开抢时间 + 倒计时 */
+function flashBanner(p) {
+    const st = flashState(p);
+    const t = parseTime(p.flashStartTime);
+    const timeStr = t ? fmtTime(p.flashStartTime) : '待定';
+    if (st.started) {
+        return '<div class="flash-banner on">' + icon('bolt', 16) +
+            '<div><b>捡漏已开抢</b><span>每人限抢一次，先到先得</span></div></div>';
+    }
+    return '<div class="flash-banner wait">' + icon('clock', 16) +
+        '<div><b>距开抢还有 ' + untilText(p.flashStartTime) + '</b>' +
+        '<span>开抢时间：' + timeStr + '</span></div></div>';
+}
+
 /* ======================= 商品详情 ======================= */
 async function viewDetail(id) {
     app.innerHTML = topBar('商品详情', true) + '<div class="h5-body"><div class="loading">加载中…</div></div>';
@@ -292,11 +336,19 @@ async function viewDetail(id) {
         '  <div class="detail-pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '📦') + '</div>' +
         '  <div class="detail-price"><small>¥</small>' + Number(p.price || 0).toFixed(2) + '</div>' +
         '  <div class="detail-title">' + esc(p.title || '') + '</div>' +
-        '  <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">' +
+        '  <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
         tag('productStatus', p.status) +
         (p.isFlashSale === 1 ? badge('限时捡漏', 'orange') : '') +
         (p.conditionLevel ? badge(conditionText(p.conditionLevel), 'gray') : '') +
         '</div>' +
+        // 热度行：浏览 / 收藏（这两个数字让买家判断"这件东西有多少人关注"）
+        '  <div class="heat-row">' +
+        '    <span>' + icon('user', 14) + ' <b>' + (p.viewCount || 0) + '</b> 人浏览</span>' +
+        '    <span>' + icon('heart', 14) + ' <b>' + (p.favoriteCount || 0) + '</b> 人收藏</span>' +
+        '    <span class="muted" style="font-size:12px">' + esc(p.categoryName || '') + '</span>' +
+        '  </div>' +
+        // 捡漏倒计时 / 开抢时间
+        (p.isFlashSale === 1 ? flashBanner(p) : '') +
         '  <div class="row" style="margin-top:14px">' +
         '    <div class="r-head"><span><b>' + esc(p.sellerNickname || p.sellerName || '卖家') + '</b></span>' +
         '      <span class="muted" style="font-size:12px">' + esc(p.categoryName || '') + '</span></div>' +
@@ -463,19 +515,23 @@ async function viewFlash() {
     }
     box.innerHTML = list.map(f => {
         const img = firstImg(f.images);
-        const started = !f.flashStartTime || new Date(String(f.flashStartTime).replace(' ', 'T')) <= new Date();
+        const st = flashState(f);
         const sold = f.status === 1;
+        const timeText = f.flashStartTime
+            ? (st.started ? '开抢时间：' + fmtTime(f.flashStartTime) : '开抢时间：' + fmtTime(f.flashStartTime) + '（还有 ' + untilText(f.flashStartTime) + '）')
+            : '开抢时间：待定';
         return '<div class="row">' +
             '<div class="r-main">' +
-            '  <div class="pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '⚡') + '</div>' +
+            '  <div class="pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : icon('bolt')) + '</div>' +
             '  <div class="t"><b>' + esc(f.title || '') + '</b>' +
             '    <small>' + esc(f.sellerName || f.sellerNickname || '') + ' · ' + conditionText(f.conditionLevel) + '</small>' +
-            '    <div style="color:#e5484d;font-weight:600;font-size:15px;margin-top:3px">¥' + Number(f.price || 0).toFixed(2) + '</div>' +
+            '    <div style="color:#e11d48;font-weight:700;font-size:15.5px;margin-top:3px">¥' + Number(f.price || 0).toFixed(2) + '</div>' +
+            '    <div class="muted" style="font-size:11.5px;margin-top:4px">' + icon('clock', 12) + ' ' + timeText + '</div>' +
             '  </div>' +
             '</div>' +
             '<div class="r-actions">' +
             (sold ? badge('已被抢走', 'gray') :
-                !started ? badge('未开始', 'orange') :
+                !st.started ? badge('未开始 · 还有 ' + untilText(f.flashStartTime), 'orange') :
                     '<button class="btn primary" data-grab="' + f.id + '">立即抢</button>') +
             '</div></div>';
     }).join('');

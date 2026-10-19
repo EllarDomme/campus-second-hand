@@ -441,6 +441,42 @@ body.h5 {
 @keyframes sheetUp { from { transform: translateY(40px); opacity: .7; } to { transform: none; opacity: 1; } }
 .sheet h3 { margin: 0 0 16px; font-size: 16px; }
 
+/* ---------- 热度行 / 捡漏横幅 ---------- */
+.heat-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 10px;
+    padding: 9px 12px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    font-size: 12.5px;
+    color: var(--ink-2);
+}
+.heat-row span { display: flex; align-items: center; gap: 5px; }
+.heat-row svg { width: 14px; height: 14px; color: var(--ink-3); }
+.heat-row b { color: var(--ink); font-size: 14px; font-variant-numeric: tabular-nums; }
+
+.flash-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 11px;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    font-size: 13px;
+}
+.flash-banner svg { width: 18px; height: 18px; flex: none; }
+.flash-banner b { display: block; font-size: 13.5px; }
+.flash-banner span { font-size: 11.5px; opacity: .8; }
+.flash-banner.wait { background: var(--warn-soft); color: #b45309; border: 1px solid #fde68a; }
+.flash-banner.on {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: #fff;
+    box-shadow: 0 6px 18px rgba(239, 68, 68, .28);
+}
+
 /* ---------- 骨架屏 ---------- */
 .sk-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px; margin-bottom: 10px; }
 .sk-line { height: 12px; border-radius: 6px; margin-bottom: 9px; }

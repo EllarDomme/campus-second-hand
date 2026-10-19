@@ -159,12 +159,16 @@ public class ProductServiceImpl implements ProductService {
      */
     @Override
     public ProductVO getById(Long id) {
-        Product product = productMapper.getById(id);
-        if (product == null) {
+        // 详情单独查（带分类名 / 浏览数 / 收藏数 / 卖家昵称）
+        ProductVO productVO = productMapper.getDetailVO(id);
+        if (productVO == null) {
             throw new BaseException(MessageConstant.PRODUCT_NOT_FOUND);
         }
-        ProductVO productVO = new ProductVO();
-        BeanUtils.copyProperties(product, productVO);
+        // 埋点：浏览 +1。
+        // 用一条 update 自增，不做"先查再写" —— 并发下后者会丢计数。
+        // 返回给前端的是 +1 之后的值，否则用户看到的会是"我进来之前的数字"。
+        productMapper.incrViewCount(id);
+        productVO.setViewCount((productVO.getViewCount() == null ? 0 : productVO.getViewCount()) + 1);
         return productVO;
     }
 

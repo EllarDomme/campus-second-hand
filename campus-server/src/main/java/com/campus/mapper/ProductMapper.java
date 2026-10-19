@@ -108,4 +108,19 @@ public interface ProductMapper {
      */
     List<FlashSaleAdminVO> listFlashSaleForAdmin();
 
+    /**
+     * 商品详情：比列表多带"分类名称 / 浏览次数 / 收藏人数 / 卖家昵称"
+     */
+    ProductVO getDetailVO(Long id);
+
+    /**
+     * 浏览数 +1
+     *
+     * 为什么用 `view_count = view_count + 1` 而不是"先查再写"：
+     *   后者在并发下会丢计数（两个人同时读到 100，都写 101）——
+     *   自增这类操作要交给数据库一条语句完成。
+     */
+    @Update("update product set view_count = view_count + 1 where id = #{id}")
+    int incrViewCount(Long id);
+
 }

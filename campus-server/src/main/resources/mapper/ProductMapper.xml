@@ -43,6 +43,8 @@
                p.audit_note             auditNote,
                p.status                 status,
                p.update_time            updateTime,
+               p.view_count             viewCount,
+               (select count(*) from favorite f where f.product_id = p.id) favoriteCount,
                c.category_name          categoryName
         from product p
         left join category c on p.category_id = c.id
@@ -102,6 +104,36 @@
                 and audit_status = #{auditStatus}
             </if>
         </where>
+    </select>
+
+    <!--
+        商品详情（单独一条 SQL，而不是复用 selectList 再按 id 过滤）
+        原因：详情页要的东西比列表多 —— 分类名称 + 浏览次数 + 收藏人数，
+        而且详情是"每次进都要更准"的实时数据，和列表缓存的策略不同。
+    -->
+    <select id="getDetailVO" resultType="com.campus.vo.ProductVO">
+        select p.id                     id,
+               p.seller_id              sellerId,
+               p.category_id            categoryId,
+               p.title                  title,
+               p.price                  price,
+               p.images                 images,
+               p.description            description,
+               p.condition_level        conditionLevel,
+               p.is_flash_sale          isFlashSale,
+               p.flash_start_time       flashStartTime,
+               p.audit_status           auditStatus,
+               p.audit_note             auditNote,
+               p.status                 status,
+               p.update_time            updateTime,
+               p.view_count             viewCount,
+               (select count(*) from favorite f where f.product_id = p.id) favoriteCount,
+               c.category_name          categoryName,
+               u.nickname               sellerNickname
+        from product p
+        left join category c on p.category_id = c.id
+        left join user u on p.seller_id = u.id
+        where p.id = #{id}
     </select>
 
     <!-- 捡漏专区：捡漏 + 已过审 + 未下架（在售0 / 交易中1 都查出来，后者前端显示"已抢光"） -->
