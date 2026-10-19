@@ -18,7 +18,9 @@ import com.campus.service.EmployeeService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -48,8 +50,17 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         //密码比对
-        // TODO 后期需要进行md5加密，然后再进行比对
-        if (!password.equals(employee.getPassword())) {
+        // ┌── 补上了骨架里那个 TODO：原来是明文比对 ───────────────────────
+        // │ 原版：if (!password.equals(employee.getPassword()))   ← 明文比明文
+        // │ 问题：库里存明文，一旦库被拖走所有管理员密码直接泄露；
+        // │      而且"肉眼可读"意味着内部人员也能看到别人的密码。
+        // │ 改法：库里存 MD5 摘要，登录时把用户输入也摘要一次再比。
+        // │ 说明：MD5 不是"加密"而是摘要（不可逆），它防的是"明文泄露"，
+        // │      防不住彩虹表 —— 生产环境应该用 BCrypt/Argon2 这类带盐慢哈希。
+        // │      这里选 MD5 是因为和原版建表约定一致，改动面最小。
+        // └──────────────────────────────────────────────────────────────
+        String inputDigest = DigestUtils.md5DigestAsHex(password.getBytes(StandardCharsets.UTF_8));
+        if (!inputDigest.equals(employee.getPassword())) {
             //密码错误
             throw new PasswordErrorException(MessageConstant.PASSWORD_ERROR);
         }
@@ -77,8 +88,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         //设置账号的状态
         employee.setStatus(StatusConstant.ENABLE);
 
-        //设置密码默认值是123456
-        employee.setPassword("123456");
+        //设置密码默认值是123456（存摘要，不存明文）
+        employee.setPassword(DigestUtils.md5DigestAsHex("123456".getBytes(StandardCharsets.UTF_8)));
 
         /**
         //设置当前记录的创建时间和修改时间
