@@ -161,6 +161,9 @@ async function renderAll() {
     if (key === 'orders') return viewOrders();
     if (key === 'fav') return viewFav();
     if (key === 'runner') return viewRunner();
+    if (key === 'publish') return viewPublish(arg);
+    if (key === 'mine') return viewMine();
+    if (key === 'bargain') return viewBargain();
     location.hash = '#/home';
 }
 
@@ -173,6 +176,10 @@ async function viewHome() {
     app.innerHTML =
         topBar('校园二手') +
         '<div class="h5-body">' +
+        '  <div style="display:flex;gap:8px;margin-bottom:10px">' +
+        '    <a class="btn primary" style="flex:1" href="#/publish">＋ 发布二手</a>' +
+        '    <a class="btn" style="flex:1" href="#/orders">我的订单</a>' +
+        '  </div>' +
         '  <div class="chips" id="cats"><span class="chip on" data-cat="">全部</span></div>' +
         '  <div id="goods"><div class="loading">加载中…</div></div>' +
         '</div>' + tabbar('home');
@@ -541,7 +548,10 @@ async function viewMe() {
         '</div>' +
 
         '<div class="menu-list" style="margin-bottom:12px">' +
+        '  <a href="#/publish">发布二手 <span class="chev">›</span></a>' +
+        '  <a href="#/mine">我的发布 <span class="chev">›</span></a>' +
         '  <a href="#/orders">我的订单 <span class="chev">›</span></a>' +
+        '  <a href="#/bargain">我的议价 <span class="chev">›</span></a>' +
         '  <a href="#/fav">我的收藏 <span class="chev">›</span></a>' +
         '  <a href="#/runner">跑腿大厅（抢单）<span class="chev">›</span></a>' +
         '  <a href="#" id="credit-log">信用分流水 <span class="chev">›</span></a>' +
@@ -637,7 +647,12 @@ async function loadOrders() {
                 '<button class="btn danger" data-act="cancel" data-id="' + o.id + '">取消</button>';
         }
         if (st === 2) {
-            actions = '<button class="btn" data-act="review" data-id="' + o.id + '">评价</button>';
+            actions = '<button class="btn" data-act="review" data-id="' + o.id + '">评价</button>' +
+                '<button class="btn" data-act="complain" data-id="' + o.id + '" data-pid="' + (o.productId || '') + '">投诉</button>';
+        }
+        // 未支付的订单（比如议价被接受后生成的单）要能补支付
+        if (o.payStatus === 0 && (st === 0 || st === 1)) {
+            actions = '<button class="btn primary" data-act="pay" data-no="' + esc(o.orderNo || '') + '">去支付</button>' + actions;
         }
         return '<div class="row">' +
             '<div class="r-head"><span class="no">' + esc(o.orderNo || ('#' + o.id)) + '</span>' +
@@ -645,7 +660,10 @@ async function loadOrders() {
             '<div class="r-main">' +
             '  <div class="pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '📦') + '</div>' +
             '  <div class="t"><b>' + esc(o.productTitle || ('商品 #' + o.productId)) + '</b>' +
-            '    <small>' + (orderView === 'buyer' ? '卖家：' + esc(o.sellerNickname || '-') : '买家：' + esc(o.buyerNickname || '-')) + '</small>' +
+            '    <small>' + (orderView === 'buyer'
+                ? '卖家 #' + (o.sellerId || '-')
+                : '买家 #' + (o.buyerId || '-')) +
+            ' · ' + (o.dealType === 1 ? '跑腿帮送' : '线下自提') + '</small>' +
             '    <div style="color:#e5484d;font-weight:600;margin-top:3px">¥' + Number(o.realPrice || 0).toFixed(2) + '</div>' +
             '  </div>' +
             '</div>' +
@@ -657,7 +675,11 @@ async function loadOrders() {
         const act = b.getAttribute('data-act');
         const id = b.getAttribute('data-id');
         try {
-            if (act === 'confirm') { await uapi('PUT', '/user/order/confirm/' + id); toast('已确认，等买家收货', 'ok'); }
+            if (act === 'pay') {
+                await uapi('POST', '/user/order/pay?orderNo=' + encodeURIComponent(b.getAttribute('data-no')));
+                toast('支付成功（模拟通道）', 'ok');
+            }
+            else if (act === 'confirm') { await uapi('PUT', '/user/order/confirm/' + id); toast('已确认，等买家收货', 'ok'); }
             else if (act === 'complete') { await uapi('PUT', '/user/order/complete/' + id); toast('已确认收货，去给对方评价吧', 'ok'); }
             else if (act === 'reject') {
                 await uapi('PUT', '/user/order/reject', { id: Number(id), reason: '卖家拒绝交易' });
@@ -668,6 +690,8 @@ async function loadOrders() {
                 toast('已取消', 'ok');
             } else if (act === 'review') {
                 return openReview(id);
+            } else if (act === 'complain') {
+                return openComplaint({ orderId: Number(id), productId: Number(b.getAttribute('data-pid')) || null });
             }
             loadOrders();
             refreshUnread();
@@ -780,6 +804,250 @@ async function loadRunner(which) {
             loadRunner('mine');
         } catch (e) { b.disabled = false; }
     });
+}
+
+/* ======================= 发布 / 编辑商品 ======================= */
+async function viewPublish(pid) {
+    const isEdit = !!pid;
+    let p = {};
+    if (isEdit) {
+        try { p = await uapi('GET', '/user/product/' + pid); } catch (e) { }
+    }
+    let cats = [];
+    try { cats = await uapi('GET', '/user/category/list', null, { quiet: true }) || []; } catch (e) { }
+
+    app.innerHTML = topBar(isEdit ? '编辑商品' : '发布二手', true) +
+        '<div class="h5-body">' +
+        '  <div class="field"><label>商品标题</label><input id="p-title" value="' + esc(p.title || '') + '" placeholder="例如：考研数学复习全书（2025版）"></div>' +
+        '  <div class="field"><label>价格（元）</label><input id="p-price" type="number" value="' + (p.price || '') + '" placeholder="例如 35"></div>' +
+        '  <div class="field"><label>分类</label><select id="p-cat">' +
+        cats.map(c => '<option value="' + c.id + '"' + (Number(p.categoryId) === Number(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
+        '  </select></div>' +
+        '  <div class="field"><label>成色</label><select id="p-cond">' +
+        [1, 2, 3, 4, 5].map(l => '<option value="' + l + '"' + (Number(p.conditionLevel) === l ? ' selected' : '') + '>' + conditionText(l) + '</option>').join('') +
+        '  </select></div>' +
+        '  <div class="field"><label>商品描述</label><textarea id="p-desc" placeholder="用法说明、有没有笔记、哪里有磨损…">' + esc(p.description || '') + '</textarea></div>' +
+        '  <div class="field"><label>图片地址（每行一个，可留空）</label>' +
+        '    <textarea id="p-imgs" placeholder="https://example.com/1.jpg&#10;https://example.com/2.jpg">' +
+        esc(String(p.images || '').split(',').filter(x => x.trim()).join('\n')) + '</textarea>' +
+        '    <div class="hint" style="font-size:11.5px;color:#8f98a6">没有图床可以先留空，页面上会显示占位图</div></div>' +
+        '  <div class="field"><label style="display:flex;align-items:center;gap:8px">' +
+        '    <input id="p-flash" type="checkbox" style="width:auto"' + (p.isFlashSale === 1 ? ' checked' : '') + '> 同时参加限时捡漏</label>' +
+        '  </div>' +
+        '  <div class="field" id="flash-box" style="' + (p.isFlashSale === 1 ? '' : 'display:none') + '">' +
+        '    <label>抢购开始时间</label><input id="p-flashtime" type="datetime-local">' +
+        '    <div class="hint" style="font-size:11.5px;color:#8f98a6">捡漏商品会出现在"捡漏"专区，每人只能抢一次</div></div>' +
+        '  <div class="hint" style="font-size:12px;color:#8f98a6;margin:14px 0">' +
+        '    发布后进入【待审核】，管理员通过后才会在首页出现 —— 二手平台需要人工把关违禁品。</div>' +
+        '  <button class="btn primary block" id="p-save">' + (isEdit ? '保存修改' : '提交发布') + '</button>' +
+        '</div>';
+
+    document.getElementById('p-flash').onchange = (e) => {
+        document.getElementById('flash-box').style.display = e.target.checked ? '' : 'none';
+    };
+
+    document.getElementById('p-save').onclick = async () => {
+        const title = document.getElementById('p-title').value.trim();
+        const price = Number(document.getElementById('p-price').value);
+        const images = document.getElementById('p-imgs').value.split('\n').map(x => x.trim()).filter(Boolean).join(',');
+        const isFlash = document.getElementById('p-flash').checked ? 1 : 0;
+        const ft = document.getElementById('p-flashtime').value;
+        if (!title) return toast('请填写标题', 'err');
+        if (!price || price <= 0) return toast('请填写正确的价格', 'err');
+
+        const body = {
+            categoryId: Number(document.getElementById('p-cat').value) || null,
+            title: title,
+            price: price,
+            images: images,
+            description: document.getElementById('p-desc').value.trim(),
+            conditionLevel: Number(document.getElementById('p-cond').value),
+            isFlashSale: isFlash,
+            flashStartTime: isFlash && ft ? ft.replace('T', ' ') + ':00' : null
+        };
+        const btn = document.getElementById('p-save');
+        btn.disabled = true;
+        try {
+            if (isEdit) {
+                body.id = Number(pid);
+                await uapi('PUT', '/user/product', body);
+                toast('已保存', 'ok');
+            } else {
+                await uapi('POST', '/user/product', body);
+                toast('已提交，等待管理员审核', 'ok');
+            }
+            location.hash = '#/mine';
+        } catch (e) { btn.disabled = false; }
+    };
+}
+
+/* ======================= 我的发布 ======================= */
+async function viewMine() {
+    app.innerHTML = topBar('我的发布', true) +
+        '<div class="h5-body">' +
+        '  <a class="btn primary block" href="#/publish" style="margin-bottom:12px">+ 发布新商品</a>' +
+        '  <div id="mine-list"><div class="loading">加载中…</div></div>' +
+        '</div>';
+
+    const box = document.getElementById('mine-list');
+    const d = await uapi('GET', '/user/product/mine?page=1&pageSize=30');
+    const rows = (d && d.records) || [];
+    if (!rows.length) {
+        box.innerHTML = '<div class="h5-empty">还没有发布过商品<br><small>点上面的按钮发布第一件</small></div>';
+        return;
+    }
+    box.innerHTML = rows.map(p => {
+        const img = firstImg(p.images);
+        return '<div class="row">' +
+            '<div class="r-head"><span class="no">' + (p.auditStatus === 0 ? '待审核' : p.auditStatus === 2 ? '已驳回' : '已通过') + '</span>' +
+            tag('productStatus', p.status) + '</div>' +
+            '<div class="r-main" data-pid="' + p.id + '" style="cursor:pointer">' +
+            '  <div class="pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '📦') + '</div>' +
+            '  <div class="t"><b>' + esc(p.title || '') + '</b>' +
+            '    <small>¥' + Number(p.price || 0).toFixed(2) + (p.auditNote ? ' · 驳回原因：' + esc(p.auditNote) : '') + '</small>' +
+            '  </div></div>' +
+            '<div class="r-actions">' +
+            '<button class="btn sm" data-act="edit" data-id="' + p.id + '">编辑</button>' +
+            (p.status === 0
+                ? '<button class="btn sm" data-act="off" data-id="' + p.id + '">下架</button>'
+                : (p.status === 3 ? '<button class="btn sm" data-act="on" data-id="' + p.id + '">重新上架</button>' : '')) +
+            '<button class="btn sm danger" data-act="del" data-id="' + p.id + '">删除</button>' +
+            '</div></div>';
+    }).join('');
+
+    box.querySelectorAll('[data-pid]').forEach(b =>
+        b.onclick = () => { location.hash = '#/detail/' + b.getAttribute('data-pid'); });
+    box.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
+        const id = b.getAttribute('data-id');
+        const act = b.getAttribute('data-act');
+        try {
+            if (act === 'edit') return location.hash = '#/publish/' + id;
+            if (act === 'off') { await uapi('POST', '/user/product/status/3?id=' + id); toast('已下架', 'ok'); }
+            else if (act === 'on') { await uapi('POST', '/user/product/status/0?id=' + id); toast('已重新上架（若需重新审核请编辑后保存）', 'ok'); }
+            else if (act === 'del') {
+                if (!confirm('删除后无法恢复，确定删除？')) return;
+                await uapi('DELETE', '/user/product?id=' + id);
+                toast('已删除', 'ok');
+            }
+            viewMine();
+        } catch (e) { }
+    });
+}
+
+/* ======================= 议价 ======================= */
+let bargainView = 'buyer';
+
+const BARGAIN_STATUS = { 0: ['待回应', 'orange'], 1: ['买家出价', 'blue'], 2: ['卖家还价', 'blue'], 3: ['已接受', 'green'], 4: ['已拒绝', 'gray'], 5: ['已过期', 'gray'] };
+
+async function viewBargain() {
+    app.innerHTML = topBar('我的议价', true) +
+        '<div class="h5-body">' +
+        '  <div class="chips" id="bv">' +
+        '    <span class="chip' + (bargainView === 'buyer' ? ' on' : '') + '" data-v="buyer">我出的价</span>' +
+        '    <span class="chip' + (bargainView === 'seller' ? ' on' : '') + '" data-v="seller">别人对我的出价</span>' +
+        '  </div>' +
+        '  <div id="bargain-list"><div class="loading">加载中…</div></div>' +
+        '</div>';
+
+    app.querySelectorAll('[data-v]').forEach(b => b.onclick = () => {
+        bargainView = b.getAttribute('data-v');
+        viewBargain();
+    });
+
+    const box = document.getElementById('bargain-list');
+    const d = await uapi('GET', '/user/bargain/list' + qs({ page: 1, pageSize: 30, view: bargainView }));
+    const rows = (d && d.records) || [];
+    if (!rows.length) {
+        box.innerHTML = '<div class="h5-empty">' +
+            (bargainView === 'buyer' ? '还没出过价<br><small>去商品详情页点"议价"</small>' : '还没有人跟你议价') + '</div>';
+        return;
+    }
+
+    box.innerHTML = rows.map(b => {
+        const st = BARGAIN_STATUS[b.bargainStatus] || ['未知', 'gray'];
+        const img = firstImg(b.productImages);
+        const canOperate = bargainView === 'seller' && (b.bargainStatus <= 2);
+        return '<div class="row">' +
+            '<div class="r-head"><span class="no">' + fmtTime(b.createTime) + '</span>' + badge(st[0], st[1]) + '</div>' +
+            '<div class="r-main">' +
+            '  <div class="pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '📦') + '</div>' +
+            '  <div class="t"><b>' + esc(b.productTitle || '') + '</b>' +
+            '    <small>原价 ¥' + Number(b.productPrice || 0).toFixed(2) +
+            ' · ' + (bargainView === 'buyer' ? '卖家 ' + esc(b.sellerName || '') : '买家 ' + esc(b.buyerName || '')) + '</small>' +
+            '    <div style="margin-top:5px;font-size:13px">' +
+            '      <span style="color:#e5484d;font-weight:600">出价 ¥' + Number(b.buyerOffer || 0).toFixed(2) + '</span>' +
+            (b.sellerCounterOffer ? ' <span style="color:#2f6bff">卖家还价 ¥' + Number(b.sellerCounterOffer).toFixed(2) + '</span>' : '') +
+            '    </div>' +
+            '    <div class="muted" style="font-size:11px;margin-top:3px">' + fmtTime(b.expireTime) + ' 前有效</div>' +
+            '  </div></div>' +
+            (canOperate ? '<div class="r-actions">' +
+                '<button class="btn sm primary" data-act="accept" data-id="' + b.id + '">接受</button>' +
+                '<button class="btn sm" data-act="counter" data-id="' + b.id + '">还价</button>' +
+                '<button class="btn sm danger" data-act="reject" data-id="' + b.id + '">拒绝</button>' +
+                '</div>' : '') +
+            '</div>';
+    }).join('');
+
+    box.querySelectorAll('[data-act]').forEach(btn => btn.onclick = async () => {
+        const id = btn.getAttribute('data-id');
+        const act = btn.getAttribute('data-act');
+        try {
+            if (act === 'accept') {
+                if (!confirm('接受这个价格？系统会立刻生成一笔订单，买家再去支付。')) return;
+                await uapi('PUT', '/user/bargain/accept/' + id);
+                toast('已接受，订单已生成（买家需在订单里支付）', 'ok');
+            } else if (act === 'reject') {
+                await uapi('PUT', '/user/bargain/reject/' + id);
+                toast('已拒绝', 'ok');
+            } else if (act === 'counter') {
+                const v = prompt('你想卖多少钱？');
+                if (!v) return;
+                await uapi('PUT', '/user/bargain/counter', { id: Number(id), counterOffer: Number(v) });
+                toast('已还价', 'ok');
+            }
+            viewBargain();
+        } catch (e) { }
+    });
+}
+
+/* ======================= 发起投诉 ======================= */
+function openComplaint(opts) {
+    const mask = document.createElement('div');
+    mask.className = 'sheet-mask';
+    mask.innerHTML =
+        '<div class="sheet"><h3>发起投诉</h3>' +
+        '<div class="field"><label>投诉类型</label><select id="c-type">' +
+        '  <option value="1"' + (opts.orderId ? ' selected' : '') + '>交易投诉</option>' +
+        '  <option value="0"' + (opts.productId && !opts.orderId ? ' selected' : '') + '>商品投诉</option>' +
+        '</select></div>' +
+        '<div class="field"><label>投诉原因</label><select id="c-reason">' +
+        '  <option value="1">与描述不符</option><option value="2">虚假描述</option>' +
+        '  <option value="3">卖家/买家失联</option><option value="4">交付纠纷</option>' +
+        '  <option value="9">其他</option></select></div>' +
+        '<div class="field"><label>详细说明</label><textarea id="c-content" placeholder="把事情经过写清楚，管理员据此裁决"></textarea></div>' +
+        '<div class="field"><label>证据图片地址（每行一个，可留空）</label><textarea id="c-imgs"></textarea></div>' +
+        '<div class="hint" style="font-size:12px;color:#8f98a6;margin-bottom:12px">' +
+        '  投诉经管理员查实成立后，被投诉人会被扣 10 分信用分。</div>' +
+        '<div style="display:flex;gap:9px"><button class="btn" style="flex:1" data-close>取消</button>' +
+        '<button class="btn primary" style="flex:1" id="c-ok">提交投诉</button></div></div>';
+    document.body.appendChild(mask);
+    mask.querySelector('[data-close]').onclick = () => mask.remove();
+    mask.onclick = (e) => { if (e.target === mask) mask.remove(); };
+    mask.querySelector('#c-ok').onclick = async () => {
+        const content = mask.querySelector('#c-content').value.trim();
+        if (!content) return toast('请写清投诉内容', 'err');
+        const body = {
+            complaintType: Number(mask.querySelector('#c-type').value),
+            complaintReason: Number(mask.querySelector('#c-reason').value),
+            content: content,
+            images: mask.querySelector('#c-imgs').value.split('\n').map(x => x.trim()).filter(Boolean).join(','),
+            productId: opts.productId || null,
+            orderId: opts.orderId || null
+        };
+        await uapi('POST', '/user/complaint', body);
+        toast('已提交，管理员会尽快处理', 'ok');
+        mask.remove();
+    };
 }
 
 /* ======================= 启动 ======================= */
