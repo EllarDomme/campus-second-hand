@@ -119,23 +119,23 @@ async function refreshUnread() {
 
 function tabbar(cur) {
     const t = [
-        { k: 'home', n: '首页', i: '🏠' },
-        { k: 'flash', n: '捡漏', i: '⚡' },
-        { k: 'msg', n: '消息', i: '💬' },
-        { k: 'me', n: '我的', i: '👤' }
+        { k: 'home', n: '首页', i: 'home' },
+        { k: 'flash', n: '捡漏', i: 'bolt' },
+        { k: 'msg', n: '消息', i: 'message' },
+        { k: 'me', n: '我的', i: 'user' }
     ];
     return '<div class="tabbar">' + t.map(x =>
         '<a href="#/' + x.k + '" class="' + (x.k === cur ? 'active' : '') + '">' +
-        '<span class="ico">' + x.i + '</span><span>' + x.n + '</span>' +
+        icon(x.i) + '<span>' + x.n + '</span>' +
         (x.k === 'msg' && unreadTotal ? '<span class="badge-dot">' + (unreadTotal > 99 ? '99+' : unreadTotal) + '</span>' : '') +
         '</a>').join('') + '</div>';
 }
 
 function topBar(title, showBack) {
     return '<div class="h5-top">' +
-        (showBack ? '<span class="back" onclick="history.back()">‹</span>' : '') +
+        (showBack ? '<span class="back" onclick="history.back()">' + icon('arrow') + '</span>' : '') +
         '<h2>' + esc(title) + '</h2>' +
-        (U.ok() ? '<a href="#/me" style="font-size:12px;color:#8f98a6">' + esc(U.info().nickname || '') + '</a>' : '') +
+        (U.ok() ? '<span class="who">' + esc(U.info().nickname || '同学') + '</span>' : '') +
         '</div>';
 }
 
@@ -171,14 +171,23 @@ window.addEventListener('hashchange', renderAll);
 
 /* ======================= 首页 ======================= */
 let currentCat = '';
+let searchKw = '';
 
 async function viewHome() {
     app.innerHTML =
         topBar('校园二手') +
         '<div class="h5-body">' +
-        '  <div style="display:flex;gap:8px;margin-bottom:10px">' +
-        '    <a class="btn primary" style="flex:1" href="#/publish">＋ 发布二手</a>' +
-        '    <a class="btn" style="flex:1" href="#/orders">我的订单</a>' +
+        '  <div class="hero">' +
+        '    <h1>把旧物交给需要的人</h1>' +
+        '    <p>毕业季的旧书、旧电脑，同校交易更靠谱</p>' +
+        '    <div class="search">' + icon('search') +
+        '      <input id="kw" placeholder="搜商品标题，回车搜索">' +
+        '    </div>' +
+        '    <div class="quick">' +
+        '      <a href="#/publish">' + icon('plus') + ' 发布二手</a>' +
+        '      <a href="#/orders">' + icon('box') + ' 我的订单</a>' +
+        '      <a href="#/bargain">' + icon('money') + ' 我的议价</a>' +
+        '    </div>' +
         '  </div>' +
         '  <div class="chips" id="cats"><span class="chip on" data-cat="">全部</span></div>' +
         '  <div id="goods"><div class="loading">加载中…</div></div>' +
@@ -197,8 +206,21 @@ async function viewHome() {
 
     app.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => {
         currentCat = b.getAttribute('data-cat');
+        searchKw = '';
         viewHome();
     });
+
+    // 搜索：后端 list 接口一次返回全部在售商品（不分页），所以在前端过滤
+    const kwInput = document.getElementById('kw');
+    if (kwInput) {
+        kwInput.value = searchKw;
+        kwInput.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                searchKw = kwInput.value.trim();
+                loadGoods();
+            }
+        };
+    }
 
     await loadGoods();
 }
@@ -206,10 +228,18 @@ async function viewHome() {
 async function loadGoods() {
     const box = document.getElementById('goods');
     if (!box) return;
-    box.innerHTML = '<div class="loading">加载中…</div>';
-    const list = await uapi('GET', '/user/product/list' + qs({ categoryId: currentCat }));
+    box.innerHTML = '<div class="sk-card"><div class="sk-line skeleton" style="width:70%"></div>' +
+        '<div class="sk-line skeleton" style="width:40%"></div></div>';
+    let list = await uapi('GET', '/user/product/list' + qs({ categoryId: currentCat }));
+    if (searchKw) {
+        const k = searchKw.toLowerCase();
+        list = (list || []).filter(g => (g.title || '').toLowerCase().includes(k) ||
+            (g.description || '').toLowerCase().includes(k));
+    }
     if (!list || !list.length) {
-        box.innerHTML = '<div class="h5-empty">这个分类下还没有在售商品</div>';
+        box.innerHTML = '<div class="h5-empty"><div class="art">' + icon('empty') + '</div>' +
+            '<b>' + (searchKw ? '没有搜到" ' + esc(searchKw) + ' "' : '这个分类下还没有在售商品') + '</b>' +
+            '<div>换个关键词，或者发一件试试</div></div>';
         return;
     }
     box.innerHTML = '<div class="goods-grid">' + list.map(goodsCard).join('') + '</div>';
@@ -227,12 +257,15 @@ function firstImg(images) {
 function goodsCard(p) {
     const img = firstImg(p.images);
     return '<div class="goods" data-pid="' + p.id + '">' +
-        '<div class="pic">' + (img ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">' : '📦') + '</div>' +
+        (p.isFlashSale === 1 ? '<span class="flash-flag">⚡ 捡漏</span>' : '') +
+        '<div class="pic">' + (img
+            ? '<img src="' + esc(img) + '" onerror="this.style.display=\'none\'">'
+            : icon('box')) + '</div>' +
         '<div class="info">' +
         '<div class="t">' + esc(p.title || '') + '</div>' +
         '<div class="p"><small>¥</small>' + Number(p.price || 0).toFixed(2) + '</div>' +
-        '<div class="tags">' + (p.isFlashSale === 1 ? badge('捡漏', 'orange') : '') +
-        (p.conditionLevel ? badge(conditionText(p.conditionLevel), 'gray') : '') + '</div>' +
+        '<div class="tags">' + (p.conditionLevel ? badge(conditionText(p.conditionLevel), 'gray') : '') +
+        (p.status === 1 ? badge('交易中', 'blue') : '') + '</div>' +
         '</div></div>';
 }
 

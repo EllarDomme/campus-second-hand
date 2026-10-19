@@ -6,13 +6,13 @@
    ========================================================================== */
 
 const NAV = [
-    { key: 'dashboard', name: '数据看板' },
-    { key: 'users', name: '用户管理' },
-    { key: 'audit', name: '商品审核' },
-    { key: 'flashsale', name: '捡漏活动' },
-    { key: 'delivery', name: '跑腿单' },
-    { key: 'complaint', name: '投诉工单' },
-    { key: 'review', name: '评价管理' }
+    { group: '概览', key: 'dashboard', name: '数据看板', icon: 'dashboard' },
+    { group: '内容', key: 'audit', name: '商品审核', icon: 'box' },
+    { group: '交易', key: 'flashsale', name: '捡漏活动', icon: 'bolt' },
+    { group: '交易', key: 'delivery', name: '跑腿单', icon: 'truck' },
+    { group: '治理', key: 'users', name: '用户管理', icon: 'users' },
+    { group: '治理', key: 'complaint', name: '投诉工单', icon: 'flag' },
+    { group: '治理', key: 'review', name: '评价管理', icon: 'star' }
 ];
 
 const app = document.getElementById('app');
@@ -22,12 +22,14 @@ function renderLogin() {
     app.innerHTML =
         '<div class="login-page">' +
         '  <div class="login-box">' +
-        '    <h1>校园二手交易平台</h1>' +
-        '    <p>管理后台 · 请使用管理员账号登录</p>' +
+        '    <div class="brand">' +
+        '      <span class="mark">' + icon('box', 20) + '</span>' +
+        '      <div><h1>校园二手交易平台</h1><p class="sub">管理后台 · 请使用管理员账号登录</p></div>' +
+        '    </div>' +
         '    <div class="field"><label>用户名</label><input id="u" placeholder="zhangsan" autocomplete="username"></div>' +
         '    <div class="field"><label>密码</label><input id="p" type="password" placeholder="123456" autocomplete="current-password"></div>' +
-        '    <button class="btn primary block" id="go">登录</button>' +
-        '    <p style="margin:16px 0 0;text-align:center"><a href="../index.html">← 返回入口</a></p>' +
+        '    <button class="btn primary block" id="go" style="height:42px;margin-top:4px">登录</button>' +
+        '    <p style="margin:18px 0 0;text-align:center;font-size:12.5px"><a href="../index.html">← 返回入口</a></p>' +
         '  </div>' +
         '</div>';
 
@@ -66,26 +68,49 @@ async function loadTodo() {
 
 function renderLayout() {
     const cur = (location.hash || '#/dashboard').replace('#/', '').split('?')[0] || 'dashboard';
+    const curNav = NAV.find(n => n.key === cur) || NAV[0];
 
-    const navHTML = NAV.map(n => {
+    // 按 group 分组渲染导航
+    let navHTML = '', lastGroup = '';
+    NAV.forEach(n => {
+        if (n.group !== lastGroup) {
+            navHTML += '<div class="group">' + n.group + '</div>';
+            lastGroup = n.group;
+        }
         const cnt = todoCounts && todoCounts[n.key];
-        return '<a href="#/' + n.key + '" class="' + (n.key === cur ? 'active' : '') + '">' +
-            '<span>' + n.name + '</span>' +
-            (cnt ? '<span class="dot">' + cnt + '</span>' : '') +
-            '</a>';
-    }).join('');
+        navHTML += '<a href="#/' + n.key + '" class="' + (n.key === cur ? 'active' : '') + '">' +
+            icon(n.icon) + '<span class="txt">' + n.name + '</span>' +
+            (cnt ? '<span class="dot">' + cnt + '</span>' : '') + '</a>';
+    });
+
+    const name = Auth.name() || '管理员';
+    const today = new Date();
+    const dateStr = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
+        String(today.getDate()).padStart(2, '0');
 
     app.innerHTML =
         '<div class="layout">' +
         '  <aside class="sidebar">' +
-        '    <div class="logo">校园二手交易平台<small>管理后台</small></div>' +
+        '    <div class="logo">' +
+        '      <span class="mark">' + icon('box', 15) + '</span>' +
+        '      <span>校园二手<small>管理后台</small></span>' +
+        '    </div>' +
         '    <nav>' + navHTML + '</nav>' +
         '    <div class="foot">' +
-        '      <div>当前账号：' + esc(Auth.name() || '-') + '</div>' +
-        '      <button class="btn sm" id="logout">退出登录</button>' +
+        '      <div class="who"><span class="avatar">' + esc(name.substring(0, 1)) + '</span>' +
+        '        <span>' + esc(name) + '</span></div>' +
+        '      <button class="btn sm" id="logout">' + icon('close', 13) + ' 退出</button>' +
         '    </div>' +
         '  </aside>' +
-        '  <main class="main" id="view"><div class="loading">加载中…</div></main>' +
+        '  <div class="main">' +
+        '    <div class="topbar">' +
+        '      <div class="crumb"><b>' + curNav.name + '</b>' +
+        '        <span class="sep">/</span><span>' + dateStr + '</span></div>' +
+        '      <div class="right"><span>数据实时读库</span></div>' +
+        '    </div>' +
+        '    <main class="page" id="view"><div class="loading">加载中…</div></main>' +
+        '  </div>' +
         '</div>';
 
     document.getElementById('logout').onclick = () => {
@@ -127,52 +152,118 @@ window.addEventListener('hashchange', () => {
 });
 
 /* ======================= 1. 数据看板 ======================= */
+
+/** 纯 SVG 环形图（不引任何图表库） */
+function donutSVG(segments, centerText, centerSub) {
+    const R = 52, W = 16, C = 2 * Math.PI * R;
+    const total = segments.reduce((s, x) => s + (Number(x.value) || 0), 0);
+    let acc = 0;
+    const rings = segments.map(s => {
+        const v = Number(s.value) || 0;
+        const len = total ? (v / total) * C : 0;
+        const el = '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="' + s.color + '"' +
+            ' stroke-width="' + W + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '"' +
+            ' stroke-dashoffset="' + (-acc).toFixed(2) + '" transform="rotate(-90 70 70)"' +
+            ' stroke-linecap="butt"></circle>';
+        acc += len;
+        return el;
+    }).join('');
+
+    return '<svg viewBox="0 0 140 140" style="width:140px;height:140px;flex:none">' +
+        '<circle cx="70" cy="70" r="' + R + '" fill="none" stroke="#f1f5f9" stroke-width="' + W + '"></circle>' +
+        rings +
+        '<text x="70" y="66" text-anchor="middle" font-size="20" font-weight="650" fill="#0f172a">' +
+        (centerText === undefined ? total : centerText) + '</text>' +
+        '<text x="70" y="85" text-anchor="middle" font-size="10" fill="#94a3b8">' + (centerSub || '合计') + '</text>' +
+        '</svg>';
+}
+
+/** 横向条形 */
+function barRow(label, value, max, color, suffix) {
+    const pct = max > 0 ? Math.max(2, (Number(value) / max) * 100) : 0;
+    return '<div class="bar-item">' +
+        '<div class="bar-top"><span>' + esc(label) + '</span><b>' + (value || 0) + (suffix || '') + '</b></div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct.toFixed(1) + '%;background:' + color + '"></div></div>' +
+        '</div>';
+}
+
 async function viewDashboard(el) {
     const d = await api('GET', '/admin/dashboard?lowCredit=80');
     const t = d.trade || {}, u = d.user || {}, p = d.product || {};
 
-    const stat = (k, v, cls, unit) =>
-        '<div class="stat ' + (cls || '') + '"><div class="k">' + k + '</div>' +
-        '<div class="v">' + v + (unit ? '<small>' + unit + '</small>' : '') + '</div></div>';
+    const stat = (ico, k, v, cls, unit, foot) =>
+        '<div class="stat ' + (cls || '') + '">' +
+        '<span class="ico-badge">' + icon(ico) + '</span>' +
+        '<div class="k">' + k + '</div>' +
+        '<div class="v">' + v + (unit ? '<small>' + unit + '</small>' : '') + '</div>' +
+        (foot ? '<div class="foot">' + foot + '</div>' : '') +
+        '</div>';
+
+    const pendingTotal = (d.pendingAuditProducts || 0) + (d.pendingComplaints || 0) + (d.waitingDeliveries || 0);
+
+    // 商品状态占比
+    const segs = [
+        { label: '在售', value: p.onSaleProducts || 0, color: '#10b981' },
+        { label: '交易中', value: p.inTradeProducts || 0, color: '#4f46e5' },
+        { label: '已售罄', value: p.soldOutProducts || 0, color: '#94a3b8' },
+        { label: '待审核', value: p.pendingAuditProducts || 0, color: '#f59e0b' }
+    ];
+    const maxTrade = Math.max(t.monthOrders || 0, t.todayOrders || 0, 1);
 
     el.innerHTML =
         '<div class="head"><div><h2>数据看板</h2>' +
-        '<div class="sub">进入后台先看三个待办数字，再往下看平台整体情况</div></div></div>' +
+        '<div class="sub">先看待办（需要人工处理的），再看平台整体。交易按【完成时间】统计 —— ' +
+        '一个月前下单、今天才收货，算今天成交。</div></div>' +
+        '<button class="btn" id="dash-refresh">' + icon('clock', 14) + ' 刷新</button></div>' +
 
-        '<h3 style="font-size:14px;margin:0 0 10px">待办（需要我处理的）</h3>' +
-        '<div class="stat-grid" style="margin-bottom:20px">' +
-        stat('待审核商品', d.pendingAuditProducts || 0, 'todo', '件') +
-        stat('待处理投诉', d.pendingComplaints || 0, 'todo', '单') +
-        stat('待接单跑腿', d.waitingDeliveries || 0, 'todo', '单') +
+        '<div class="stat-grid" style="margin-bottom:18px">' +
+        stat('box', '待审核商品', d.pendingAuditProducts || 0, 'todo', '件', '审核通过后才对外展示') +
+        stat('flag', '待处理投诉', d.pendingComplaints || 0, 'todo', '单', '建议当天处理完毕') +
+        stat('truck', '待接单跑腿', d.waitingDeliveries || 0, 'todo', '单', '太久没人接要主动介入') +
+        stat('chart', '待办合计', pendingTotal, pendingTotal > 5 ? 'warn' : 'good', '项',
+            pendingTotal === 0 ? '当前无待办 ' : '处理完再看别处') +
         '</div>' +
 
-        '<h3 style="font-size:14px;margin:0 0 10px">交易</h3>' +
-        '<div class="stat-grid" style="margin-bottom:20px">' +
-        stat('今日成交单数', t.todayOrders || 0, 'good', '单') +
-        stat('今日成交额', money(t.todayAmount), 'good') +
-        stat('本月成交单数', t.monthOrders || 0, '', '单') +
-        stat('本月成交额', money(t.monthAmount), '') +
-        stat('累计成交额', money(t.totalAmount), '') +
+        '<div class="chart-row" style="margin-bottom:18px">' +
+        '  <div class="card" style="margin:0">' +
+        '    <h3>' + icon('chart', 15) + ' 交易概况</h3>' +
+        '    <div class="bars">' +
+        barRow('今日成交单数', t.todayOrders || 0, maxTrade, 'linear-gradient(90deg,#818cf8,#4f46e5)', ' 单') +
+        barRow('本月成交单数', t.monthOrders || 0, maxTrade, 'linear-gradient(90deg,#34d399,#10b981)', ' 单') +
+        '    </div>' +
+        '    <div class="legend">' +
+        '      <span style="margin-left:0">今日成交额 <b>' + money(t.todayAmount) + '</b></span>' +
+        '      <span>本月成交额 <b>' + money(t.monthAmount) + '</b></span>' +
+        '      <span>累计成交额 <b>' + money(t.totalAmount) + '</b></span>' +
+        '    </div>' +
+        '  </div>' +
+        '  <div class="card" style="margin:0">' +
+        '    <h3>' + icon('box', 15) + ' 商品状态占比</h3>' +
+        '    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+        donutSVG(segs, undefined, '在架商品') +
+        '      <div class="bars" style="flex:1;min-width:120px;gap:9px">' +
+        segs.map(s =>
+            '<div class="bar-item"><div class="bar-top"><span>' + s.label + '</span><b>' + s.value + '</b></div>' +
+            '<div class="bar-track"><div class="bar-fill" style="width:' +
+            (segs.reduce((a, b) => a + b.value, 0) ? Math.max(2, s.value / segs.reduce((a, b) => a + b.value, 0) * 100) : 0).toFixed(1) +
+            '%;background:' + s.color + '"></div></div></div>').join('') +
+        '      </div>' +
+        '    </div>' +
+        '  </div>' +
         '</div>' +
 
-        '<h3 style="font-size:14px;margin:0 0 10px">用户</h3>' +
-        '<div class="stat-grid" style="margin-bottom:20px">' +
-        stat('用户总数', u.totalUsers || 0, '', '人') +
-        stat('跑腿员', u.totalRunners || 0, '', '人') +
-        stat('已封禁', u.bannedUsers || 0, u.bannedUsers ? 'todo' : '', '人') +
-        stat('低信用分（&lt;80）', u.lowCreditUsers || 0, u.lowCreditUsers ? 'todo' : '', '人') +
-        '</div>' +
-
-        '<h3 style="font-size:14px;margin:0 0 10px">商品</h3>' +
-        '<div class="stat-grid">' +
-        stat('在售', p.onSaleProducts || 0, '', '件') +
-        stat('交易中', p.inTradeProducts || 0, '', '件') +
-        stat('已售罄', p.soldOutProducts || 0, '', '件') +
-        stat('待审核', p.pendingAuditProducts || 0, p.pendingAuditProducts ? 'todo' : '', '件') +
-        '</div>' +
-        '<div class="card" style="margin-top:18px;padding:13px 18px;color:#8f98a6;font-size:12.5px">' +
-        '说明：交易的时间口径按【完成时间】统计 —— 一个月前下单、今天才收货，这笔成交算今天。' +
+        '<div class="card">' +
+        '  <h3>' + icon('users', 15) + ' 用户与商品<span class="count">实时读库</span></h3>' +
+        '  <div class="stat-grid">' +
+        stat('users', '用户总数', u.totalUsers || 0, '', '人') +
+        stat('truck', '跑腿员', u.totalRunners || 0, '', '人') +
+        stat('close', '已封禁', u.bannedUsers || 0, u.bannedUsers ? 'todo' : '', '人') +
+        stat('flag', '低信用分（&lt;80）', u.lowCreditUsers || 0, u.lowCreditUsers ? 'warn' : '', '人') +
+        '  </div>' +
         '</div>';
+
+    const rf = document.getElementById('dash-refresh');
+    if (rf) rf.onclick = () => { loadTodo().then(renderLayout); };
 }
 
 /* ======================= 2. 用户管理 ======================= */
