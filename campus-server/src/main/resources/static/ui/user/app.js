@@ -66,10 +66,11 @@ async function uapi(method, url, body, opts) {
 const app = document.getElementById('app');
 
 /* ======================= 登录 ======================= */
+/* 演示账号（都是 demo_openid_，各自带商品/订单/私信/议价，登进去不会空空如也） */
 const DEMO_USERS = [
-    { openid: 'test_openid_buyer_001', name: '小明（买家）' },
-    { openid: 'test_openid_seller_001', name: '学姐（卖家）' },
-    { openid: 'test_openid_runner_001', name: '小张（跑腿员）' }
+    { openid: 'demo_openid_1000', name: '林小满（有 2 件在卖 · 8 条私信）' },
+    { openid: 'demo_openid_1001', name: '陈知行（有在卖 · 有人向他议价）' },
+    { openid: 'demo_openid_1009', name: '韩风（跑腿员 · 可以抢单）' }
 ];
 
 function renderLogin() {
