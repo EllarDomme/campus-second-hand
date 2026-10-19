@@ -177,7 +177,17 @@ body.h5 {
 }
 .goods .pic svg { width: 34px; height: 34px; }
 .goods .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.goods .info { padding: 9px 10px 11px; }
+/* 卡片底部的热度 */
+.card-heat {
+    display: flex;
+    gap: 11px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--ink-3);
+}
+.card-heat span { display: flex; align-items: center; gap: 3px; }
+.card-heat svg { width: 12px; height: 12px; }
+.goods .info { padding: 9px 10px 10px; }
 .goods .t {
     font-size: 13px;
     line-height: 1.4;

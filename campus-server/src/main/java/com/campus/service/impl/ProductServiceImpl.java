@@ -179,21 +179,17 @@ public class ProductServiceImpl implements ProductService {
     public List<ProductVO> listByCategoryId(Long categoryId) {
         // 只展示「审核通过」且「在售」的商品：
         // 缺了 auditStatus 条件，待审核/被驳回的商品就会直接暴露给用户
-        Product query = Product.builder()
-                .categoryId(categoryId)
-                .status(ProductConstant.ON_SALE)
-                .auditStatus(ProductConstant.AUDIT_PASSED)
-                .build();
+        //
+        // 这里直接复用管理端那条件分页的 selectList，而不是走实体的 list：
+        //   · selectList 已经带上了分类名称、浏览次数、收藏人数（子查询）
+        //   · 首页卡片要显示"多少收藏"，走实体 list 就没有这些字段
+        //   · 不调 PageHelper.startPage，它就是"查全部"，不涉及分页
+        ProductPageQueryDTO query = new ProductPageQueryDTO();
+        query.setCategoryId(categoryId);
+        query.setStatus(ProductConstant.ON_SALE);
+        query.setAuditStatus(ProductConstant.AUDIT_PASSED);
 
-        List<Product> products = productMapper.list(query);
-
-        List<ProductVO> voList = new ArrayList<>();
-        for (Product p : products) {
-            ProductVO vo = new ProductVO();
-            BeanUtils.copyProperties(p, vo);
-            voList.add(vo);
-        }
-        return voList;
+        return productMapper.selectList(query);
     }
 
     /**

@@ -256,6 +256,8 @@ function firstImg(images) {
 
 function goodsCard(p) {
     const img = firstImg(p.images);
+    const views = p.viewCount || 0;
+    const favs = p.favoriteCount || 0;
     return '<div class="goods" data-pid="' + p.id + '">' +
         (p.isFlashSale === 1 ? '<span class="flash-flag">⚡ 捡漏</span>' : '') +
         '<div class="pic">' + (img
@@ -266,6 +268,11 @@ function goodsCard(p) {
         '<div class="p"><small>¥</small>' + Number(p.price || 0).toFixed(2) + '</div>' +
         '<div class="tags">' + (p.conditionLevel ? badge(conditionText(p.conditionLevel), 'gray') : '') +
         (p.status === 1 ? badge('交易中', 'blue') : '') + '</div>' +
+        // 热度：让买家一眼看出"这件东西有没有人关注"
+        '<div class="card-heat">' +
+        '<span>' + icon('user', 12) + ' ' + views + '</span>' +
+        '<span>' + icon('heart', 12) + ' ' + favs + '</span>' +
+        '</div>' +
         '</div></div>';
 }
 
