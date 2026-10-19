@@ -59,16 +59,18 @@ public class UserController {
                 .id(user.getId())
                 .openid(user.getOpenid())
                 .token(token)
+                .nickname(user.getNickname())
+                .role(user.getRole())
                 .build();
 
         return Result.success(userLoginVO);
     }
 
     /**
-     * 测试登录：用指定openid签发C端JWT，供AI点餐客服等外部系统模拟登录
+     * 测试登录：用指定openid签发C端JWT（不需要微信，供本地开发和前端联调）
      * 不同 openid 会查/建不同的用户，从而实现"多用户身份隔离"
      * @param openid 用户唯一标识（不传则默认测试账号 test_openid_0001）
-     * @return 用户的id、openid、token
+     * @return 用户的id、openid、token、昵称、角色
      */
     @GetMapping("/testLogin")
     @ApiOperation("测试登录：按openid签发C端JWT")
@@ -92,6 +94,8 @@ public class UserController {
                 .id(user.getId())
                 .openid(user.getOpenid())
                 .token(token)
+                .nickname(user.getNickname())
+                .role(user.getRole())
                 .build();
 
         return Result.success(userLoginVO);
