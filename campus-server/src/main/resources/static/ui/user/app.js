@@ -813,23 +813,6 @@ async function viewMe() {
 
         '<div class="menu-list">' +
         '  <div class="item" id="logout" style="color:#e5484d">退出登录</div>' +
-        '</div>' +
-        '<div class="rule-card">' +
-        '  <div class="rule-head">' + icon('star', 15) + ' 信用分规则</div>' +
-        '  <div class="rule-body">' +
-        '    <div class="rule-row"><span>交易完成</span><b class="up">+2</b></div>' +
-        '    <div class="rule-row"><span>收到好评（4~5 星）</span><b class="up">+1</b></div>' +
-        '    <div class="rule-row"><span>收到中评（3 星）</span><b class="flat">0</b></div>' +
-        '    <div class="rule-row"><span>收到差评（1~2 星）</span><b class="down">-2</b></div>' +
-        '    <div class="rule-row"><span>超时未确认（爽约）</span><b class="down">-5</b></div>' +
-        '    <div class="rule-row"><span>被投诉且成立</span><b class="down">-10</b></div>' +
-        '  </div>' +
-        '  <div class="rule-foot">' +
-        '    · 每日加分上限 <b>10</b> 分（只限加分，扣分不设限）<br>' +
-        '    · 分数下限 <b>0</b> 分，扣到底也不会变负<br>' +
-        '    · 管理员手动调整单次不超过 <b>±20</b> 分，且必须填写理由<br>' +
-        '    · 撤销处罚（如删除违规差评）的补偿性加分不受每日上限限制' +
-        '  </div>' +
         '</div>';
 
     document.getElementById('logout').onclick = () => {
