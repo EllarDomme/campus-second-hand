@@ -523,7 +523,7 @@ w("    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other
 w("  CONCAT('ui/img/cat_', CASE category_id")
 w("    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'")
 w("    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_c.svg'));")
-w("UPDATE user SET avatar = CONCAT('ui/img/avatar_', (id % 12) + 1, '.svg');")
+w("UPDATE user SET avatar = CONCAT('https://picsum.photos/seed/avatar', id, '/200/200');")
 w("")
 w("SELECT '演示数据已写入' AS 结果;")
 w("SELECT CONCAT('用户 ', (SELECT COUNT(*) FROM user), ' / 商品 ', (SELECT COUNT(*) FROM product),")
