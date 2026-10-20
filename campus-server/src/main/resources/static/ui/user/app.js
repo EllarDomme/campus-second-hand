@@ -203,13 +203,15 @@ async function viewHome() {
     loadHotHome();
 
     // 分类
+    // ⚠️ Category 实体的字段是 categoryName（不是 name）—— 写成 c.name 会渲染出一排
+    //    没有文字的空白胶囊，而且非常难看出问题（页面上就是"分类不见了"）。
     try {
         const cats = await uapi('GET', '/user/category/list', null, { quiet: true });
         const box = document.getElementById('cats');
         if (box && cats && cats.length) {
             box.innerHTML = '<span class="chip' + (currentCat === '' ? ' on' : '') + '" data-cat="">全部</span>' +
                 cats.map(c => '<span class="chip' + (String(currentCat) === String(c.id) ? ' on' : '') +
-                    '" data-cat="' + c.id + '">' + esc(c.name) + '</span>').join('');
+                    '" data-cat="' + c.id + '">' + esc(c.categoryName || c.name || '') + '</span>').join('');
         }
     } catch (e) { }
 
@@ -1033,7 +1035,7 @@ async function viewPublish(pid) {
         '  <div class="field"><label>商品标题</label><input id="p-title" value="' + esc(p.title || '') + '" placeholder="例如：考研数学复习全书（2025版）"></div>' +
         '  <div class="field"><label>价格（元）</label><input id="p-price" type="number" value="' + (p.price || '') + '" placeholder="例如 35"></div>' +
         '  <div class="field"><label>分类</label><select id="p-cat">' +
-        cats.map(c => '<option value="' + c.id + '"' + (Number(p.categoryId) === Number(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') +
+        cats.map(c => '<option value="' + c.id + '"' + (Number(p.categoryId) === Number(c.id) ? ' selected' : '') + '>' + esc(c.categoryName || c.name || '') + '</option>').join('') +
         '  </select></div>' +
         '  <div class="field"><label>成色</label><select id="p-cond">' +
         [1, 2, 3, 4, 5].map(l => '<option value="' + l + '"' + (Number(p.conditionLevel) === l ? ' selected' : '') + '>' + conditionText(l) + '</option>').join('') +
