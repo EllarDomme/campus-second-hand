@@ -377,7 +377,7 @@ async function loadUsers() {
         (rows.length ? rows.map(u =>
             '<tr>' +
             '<td class="num">' + u.id + '</td>' +
-            '<td><div class="t"><b>' + esc(u.nickname || '-') + '</b>' +
+            '<td><div class="cell-main"><span class="thumb-ph">' + (u.avatar ? '<img class="thumb" src="' + esc(('' + u.avatar).replace(/^\/+/, '/')) + '" onerror="this.style.display=\'none\'">' : esc((u.nickname || '?').substring(0,1))) + '</span><div class="t"><b>' + esc(u.nickname || '-') + '</b>' +
             '<small class="muted">' + esc(u.phone || u.studentNo || '') + '</small></div></td>' +
             '<td>' + (u.roleName ? badge(u.roleName, u.role === 1 ? 'blue' : 'gray') : tag('userRole', u.role)) + '</td>' +
             '<td>' + (u.statusName ? badge(u.statusName, u.status === 1 ? 'red' : 'green') : tag('userStatus', u.status)) + '</td>' +

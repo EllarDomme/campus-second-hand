@@ -22,6 +22,7 @@ public class UserLoginVO implements Serializable {
      * 并据此决定是否显示"跑腿大厅（抢单）"入口。
      * 放在登录响应里带出来，比前端再单独发一次请求省事。
      */
+    private String avatar;
     private String nickname;
     private Integer role;
 

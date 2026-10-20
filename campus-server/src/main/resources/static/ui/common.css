@@ -614,3 +614,11 @@ td.num { font-variant-numeric: tabular-nums; }
 .hot-name { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hot-tags { display: flex; align-items: center; gap: 7px; flex: none; }
 .hot-score { width: 38px; text-align: right; font-size: 15px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; flex: none; }
+/* 头像包在 thumb-ph 里时去掉底色，别再叠一层圆角背景 */
+.thumb-ph:has(img) { background: transparent; }
+
+/* 图片加载失败的角标（一眼判断是不是网络问题） */
+.img-broken { position: absolute; left: 4px; bottom: 4px; background: rgba(239,68,68,.9); color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 4px; pointer-events: none; }
+
+/* 「图裂」角标要绝对定位，所以父容器必须是 relative */
+.goods .pic, .carousel, .thumb-ph, .row .r-main .pic, .detail-pic { position: relative; }

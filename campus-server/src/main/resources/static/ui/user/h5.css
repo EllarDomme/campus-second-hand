@@ -128,9 +128,22 @@ body.h5 {
 .hero .quick a:hover { background: rgba(255, 255, 255, .26); color: #fff; }
 .hero .quick a svg { width: 15px; height: 15px; }
 
-/* ---------- 分类 chips ---------- */
-.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 12px; scrollbar-width: none; }
-.chips::-webkit-scrollbar { display: none; }
+/* ---------- 分类 chips ----------
+   为什么用换行而不是横向滚动：
+     横向滚动在【手机】上能划，但【桌面端】鼠标没法横拖、也看不到滚动条，
+     于是右侧的分类就是"既看不到也点不到" —— 这是实测出来的问题。
+     改成一排排换行，任何设备上都能一眼看全、点得到。
+   同时保留 overflow-x: auto 作为极端窄屏（比如 320px 小手机 + 长分类名）的兜底。 */
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 0 12px;
+    scrollbar-width: thin;
+}
+.chips::-webkit-scrollbar { height: 4px; }
+.chips::-webkit-scrollbar-thumb { background: var(--line); border-radius: 2px; }
 .chip {
     flex: none;
     padding: 6px 14px;
@@ -578,3 +591,6 @@ body.h5 {
 .hh-sold { font-size: 10.5px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--ok-soft); color: #059669; flex: none; }
 .hh-on { font-size: 10.5px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--warn-soft); color: #b45309; flex: none; }
 .hot-home-foot { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--ink-3); }
+
+/* ---------- 覆盖：分类 chip 必须换行显示（否则桌面端看不到右边的分类）---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; overflow-x: auto; }

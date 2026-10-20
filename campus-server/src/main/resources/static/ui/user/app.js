@@ -215,6 +215,7 @@ async function viewHome() {
         }
     } catch (e) { }
 
+    enableDragScroll(document.getElementById('cats'));
     app.querySelectorAll('[data-cat]').forEach(b => b.onclick = () => {
         currentCat = b.getAttribute('data-cat');
         searchKw = '';
@@ -303,12 +304,45 @@ function carouselHTML(images) {
         '</div>';
 }
 
+/**
+ * 让一个横向滚动的容器支持【鼠标拖拽】
+ *
+ * 为什么要这个：overflow-x 在手机上能划，但桌面端鼠标没法横拖、滚动条又常被隐藏，
+ * 结果就是"右侧的内容既看不到也点不到"。分类 chips 我直接改成换行了；
+ * 轮播图没法换行，所以给它加拖拽。
+ */
+function enableDragScroll(el) {
+    if (!el || el.__dragBound) return;
+    el.__dragBound = true;
+    let down = false, startX = 0, startLeft = 0;
+
+    el.addEventListener('mousedown', (e) => {
+        down = true;
+        startX = e.pageX;
+        startLeft = el.scrollLeft;
+        el.style.cursor = 'grabbing';
+        e.preventDefault();          // 防止选中文字
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!down) return;
+        el.scrollLeft = startLeft - (e.pageX - startX);
+    });
+    window.addEventListener('mouseup', () => {
+        if (!down) return;
+        down = false;
+        el.style.cursor = '';
+    });
+    // 触摸屏交给浏览器原生滚动，这里不动
+    el.style.cursor = 'grab';
+}
+
 /** 绑定轮播的指示点跟随（横滑时高亮当前图） */
 function bindCarousel() {
     const track = document.getElementById('car-track');
     const dots = document.getElementById('car-dots');
     if (!track || !dots) return;
     const marks = Array.from(dots.children);
+    enableDragScroll(track);          // 桌面端可以按住鼠标左右拖
     track.onscroll = () => {
         const idx = Math.round(track.scrollLeft / track.clientWidth);
         marks.forEach((m, i) => { m.className = i === idx ? 'on' : ''; });
@@ -480,7 +514,7 @@ async function viewDetail(id) {
         setHTML('revs', (revs && revs.length)
             ? revs.slice(0, 5).map(r =>
                 '<div class="row" style="padding:10px 12px"><div class="r-head">' +
-                '<span style="font-size:13px"><b>' + esc(r.fromNickname || '用户') + '</b> ' + stars(r.star) + '</span>' +
+                '<span style="font-size:13px;display:flex;align-items:center;gap:6px">' + (r.fromAvatar ? '<img src="' + esc(('' + r.fromAvatar).replace(/^\/+/, '/')) + '" style="width:20px;height:20px;border-radius:50%" onerror="this.style.display=\'none\'">' : '') + '<b>' + esc(r.fromNickname || '用户') + '</b> ' + stars(r.star) + '</span>' +
                 '<span class="muted" style="font-size:11px">' + fmtTime(r.createTime) + '</span></div>' +
                 '<div style="font-size:13px;color:#5a6472">' + esc(r.content || '（未填写内容）') + '</div></div>').join('')
             : '<div class="h5-empty" style="padding:16px 0">还没有人评价</div>');
@@ -671,7 +705,7 @@ async function viewMsg() {
     box.innerHTML = list.map(c =>
         '<div class="row" data-cid="' + c.id + '" style="cursor:pointer">' +
         '<div class="r-main">' +
-        '  <div class="pic">' + esc((c.otherNickname || '?').substring(0, 1)) + '</div>' +
+        '  <div class="pic">' + (c.otherAvatar ? '<img src="' + esc(('' + c.otherAvatar).replace(/^\/+/, '/')) + '" onerror="this.style.display=\'none\'">' : esc((c.otherNickname || '?').substring(0, 1))) + '</div>' +
         '  <div class="t"><b>' + esc(c.otherNickname || '对方') + '</b>' +
         '    <small>' + esc(c.productTitle || '') + '</small>' +
         '    <div class="muted" style="font-size:12px;margin-top:3px">' + esc(c.lastMessage || '（暂无消息）') + '</div>' +
@@ -737,7 +771,7 @@ async function viewMe() {
     const box = document.getElementById('me-box');
     box.innerHTML =
         '<div class="me-card">' +
-        '  <div class="n">' + esc(info.nickname || '同学') + '</div>' +
+        '  <div class="n">' + (info.avatar ? '<img src="' + esc(('' + info.avatar).replace(/^\/+/, '/')) + '" style="width:44px;height:44px;border-radius:50%;vertical-align:middle;margin-right:9px;border:2px solid rgba(255,255,255,.55)" onerror="this.style.display=\'none\'">' : '') + esc(info.nickname || '同学') + '</div>' +
         '  <div class="s">用户 id：' + esc(info.id || '-') + '</div>' +
         '  <div class="credit">' +
         '    <div><b>' + (credit.creditScore === undefined ? '-' : credit.creditScore) + '</b><span>信用分</span></div>' +

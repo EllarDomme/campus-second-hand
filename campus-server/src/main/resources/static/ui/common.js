@@ -286,3 +286,29 @@ function emptyBox(title, desc) {
         '<b>' + esc(title || '暂无数据') + '</b>' +
         (desc ? '<div>' + esc(desc) + '</div>' : '') + '</div>';
 }
+
+/**
+ * 图片加载失败的兜底
+ *
+ * 为什么要有它：以前是 onerror="this.style.display='none'" —— 图片挂了就静默隐藏，
+ * 页面上只剩一个空盒子，完全看不出是"网络不通"还是"链接错了"。
+ * 现在改成：换成一张本地兜底图 + 左下角标一个"图裂"，一眼能判断是网络问题。
+ *
+ * 判断方法：
+ *   · 显示兜底图 + 「图裂」→ 外网图没加载成功（网络/图床问题）
+ *   · 正常显示照片        → 外网通，加载成功
+ */
+function imgFallback(img) {
+    if (img.dataset.fallback) return;      // 防止死循环
+    img.dataset.fallback = '1';
+    img.src = '/ui/img/cat_other_a.svg';
+    img.title = '图片加载失败（外网不通或链接失效）';
+    img.style.background = '#f1f5f9';
+    var p = img.parentElement;
+    if (p && !p.querySelector('.img-broken')) {
+        var tip = document.createElement('span');
+        tip.className = 'img-broken';
+        tip.textContent = '图裂';
+        p.appendChild(tip);
+    }
+}

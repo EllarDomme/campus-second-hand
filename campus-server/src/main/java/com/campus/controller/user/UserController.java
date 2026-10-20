@@ -59,6 +59,7 @@ public class UserController {
                 .id(user.getId())
                 .openid(user.getOpenid())
                 .token(token)
+                .avatar(user.getAvatar())
                 .nickname(user.getNickname())
                 .role(user.getRole())
                 .build();
@@ -94,6 +95,7 @@ public class UserController {
                 .id(user.getId())
                 .openid(user.getOpenid())
                 .token(token)
+                .avatar(user.getAvatar())
                 .nickname(user.getNickname())
                 .role(user.getRole())
                 .build();
