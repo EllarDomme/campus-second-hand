@@ -54,9 +54,21 @@ foreach ($ownerPid in (Get-PortOwnerPids $port)) {
             if (-not (Get-PortOwnerPids $port)) { break }
         }
     }
-    elseif ($p) {
-        Write-Host "端口 $port 被【$($p.ProcessName)】(PID $($p.Id)) 占用，不是本项目的进程，请手动处理。" -ForegroundColor Red
-        exit 1
+    else {
+        # 拿不到进程信息（别的会话/管理员权限起的）—— 常见于"IDEA 里跑着一个旧实例"。
+        # 以前这里直接报错退出，结果用户每次都得自己找 IDEA 停掉，很烦。
+        # 现在先尝试按 PID 强杀（admin 权限下能成功），不行再提示手动处理。
+        Write-Host "端口 $port 被一个看不到的进程占用（PID $ownerPid）—— 可能是 IDEA 里跑的旧实例" -ForegroundColor Yellow
+        Write-Host "  正在尝试结束它..." -ForegroundColor Yellow
+        & taskkill /F /PID $ownerPid 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+        if (Get-PortOwnerPids $port) {
+            Write-Host "  ✗ 结束失败（权限不足）。请用【管理员权限】的 PowerShell 执行：" -ForegroundColor Red
+            Write-Host "      taskkill /F /PID $ownerPid" -ForegroundColor Red
+            Write-Host "    或者到 IDEA 里点红色停止按钮。" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "  ✅ 已结束旧实例" -ForegroundColor Green
     }
 }
 
