@@ -337,15 +337,16 @@ for (pid, seller, cat, title, price, cond, flash, status, audit, note, days, des
     imgs = imgs.replace('\\\\"', '\\"')
     flash_start = "DATE_ADD(NOW(), INTERVAL 2 HOUR)" if (flash and pid % 2 == 0) else (
         "DATE_SUB(NOW(), INTERVAL 3 HOUR)" if flash else None)
-    vals.append("(%d, %d, %d, %s, %.2f, %s, %s, %d, %d, %s, %s, %s, %d, %d, %s)" % (
+    vals.append("(%d, %d, %d, %s, %.2f, %s, %s, %d, %d, %s, %s, %s, %d, %d, %s, %s)" % (
         pid, seller, cat, esc(title), price,
         "'" + imgs + "'", esc(desc), cond, flash,
         (flash_start if flash_start else "NULL"),
         audit, esc(note), status,
         (pid * 17) % 180 + 20,
-        d(days)))
+        d(days), d(days)))
 w("INSERT INTO product (id, seller_id, category_id, title, price, images, description, condition_level,")
-w("                    is_flash_sale, flash_start_time, audit_status, audit_note, status, view_count, create_time) VALUES")
+w("                    is_flash_sale, flash_start_time, audit_status, audit_note, status, view_count,")
+w("                    online_time, create_time) VALUES")
 w(",\n".join(vals) + ";")
 w("")
 

@@ -104,4 +104,77 @@
         <!-- ↑↑↑ 你的 SQL 写到这上面 ↑↑↑ -->
     </select>
 
+    <!--
+        =====================================================================
+        【你的任务 A-1】分类聚合（S6-2）
+        =====================================================================
+        目标：按分类统计"卖掉了多少件 / 还在售多少件"，取前 N 个分类。
+
+        字段（别名要和 HotCategoryVO 对上）：
+          c.id            → categoryId
+          c.category_name → categoryName
+          soldCount       → 该分类下 status = 2 的商品数
+          onSaleCount     → 该分类下 status = 0 的商品数
+
+        关键点：
+          · 过滤：p.audit_status = 1 且 p.status in (0,1,2)  ← 下架/驳回的不进榜
+          · 分组：group by c.id, c.category_name
+          · 排序：soldCount desc, onSaleCount desc, c.id asc  ← 三键保证顺序稳定
+          · 限量：limit #{topCategories}
+          · 计数用 sum(case when 条件 then 1 else 0 end)，别写成两个 select
+
+        现在这里是个"永远返回空"的占位，所以页面上显示"暂无数据"。
+        =====================================================================
+    -->
+    <select id="listCategoryStat" resultType="com.campus.vo.HotCategoryVO">
+        select c.id            as categoryId,
+               c.category_name as categoryName,
+               0               as soldCount,
+               0               as onSaleCount
+        from category c
+        where 1 = 0
+    </select>
+
+    <!--
+        =====================================================================
+        【你的任务 A-2】商品明细（S6-2）
+        =====================================================================
+        目标：把 A-1 选中的那几个分类下的商品全查出来（一条 SQL，用 in）。
+
+        字段：
+          p.id, p.title, p.price, p.status, p.category_id → categoryId
+          p.view_count    → viewCount
+          favoriteCount   → (select count(*) from favorite f where f.product_id = p.id)
+          sold            → 1 if p.status = 2 else 0
+          elapsedDays     → ⭐ 核心难点，见下
+
+        ⭐ elapsedDays = DATEDIFF(结束时刻, 起算时刻)
+             结束时刻：已成交(p.status=2) → 该商品那笔已完成订单的 finish_time
+                      未成交           → NOW()
+             起算时刻：捡漏商品(is_flash_sale = 1 且 flash_start_time 不为空)
+                      → flash_start_time
+                      普通商品 → online_time
+
+        提示：可以用 case when 嵌套，也可以把两个"时刻"各写成一个 case when；
+              已成交订单的 finish_time 用子查询：
+                (select max(o.finish_time) from trade_order o
+                  where o.product_id = p.id and o.status = 2)
+
+        过滤：audit_status = 1 and status in (0,1,2) and category_id in (...)
+        =====================================================================
+    -->
+    <select id="listProductStatByCategories" resultType="com.campus.vo.HotProductVO">
+        select p.id         as productId,
+               p.category_id as categoryId,
+               p.title,
+               p.price,
+               p.status,
+               p.view_count as viewCount,
+               0            as sold,
+               0            as favoriteCount,
+               NULL         as elapsedDays
+        from product p
+        where 1 = 0
+    </select>
+
 </mapper>

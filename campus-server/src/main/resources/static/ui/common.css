@@ -598,3 +598,19 @@ td.num { font-variant-numeric: tabular-nums; }
     .topbar { padding: 0 16px; height: 52px; }
     .page { padding: 16px 14px 50px; }
 }
+
+/* ============================ 热门品类榜 ============================ */
+.hot-cat { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 10px; background: #fff; }
+.hot-cat:last-child { margin-bottom: 0; }
+.hot-cat-head { display: flex; align-items: center; gap: 10px; padding-bottom: 9px; border-bottom: 1px dashed var(--line); margin-bottom: 4px; }
+.hot-cat-head b { font-size: 14px; }
+.hot-cat-score { margin-left: auto; font-size: 12.5px; color: var(--brand); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rank-badge { width: 20px; height: 20px; border-radius: 6px; flex: none; background: var(--line-soft); color: var(--ink-2); font-size: 12px; font-weight: 700; line-height: 20px; text-align: center; }
+.rank-badge.rank-1 { background: linear-gradient(135deg, #f59e0b, #ef4444); color: #fff; }
+.rank-badge.rank-2 { background: linear-gradient(135deg, #94a3b8, #64748b); color: #fff; }
+.rank-badge.rank-3 { background: linear-gradient(135deg, #d97706, #b45309); color: #fff; }
+.hot-row { display: flex; align-items: center; gap: 12px; padding: 8px 0 8px 30px; border-bottom: 1px solid var(--line-soft); }
+.hot-row:last-child { border-bottom: none; }
+.hot-name { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hot-tags { display: flex; align-items: center; gap: 7px; flex: none; }
+.hot-score { width: 38px; text-align: right; font-size: 15px; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; flex: none; }

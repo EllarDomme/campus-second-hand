@@ -260,10 +260,63 @@ async function viewDashboard(el) {
         stat('close', '已封禁', u.bannedUsers || 0, u.bannedUsers ? 'todo' : '', '人') +
         stat('flag', '低信用分（&lt;80）', u.lowCreditUsers || 0, u.lowCreditUsers ? 'warn' : '', '人') +
         '  </div>' +
+        '</div>' +
+
+        '<div class="card">' +
+        '  <h3>' + icon('chart', 15) + ' 热门品类榜' +
+        '    <span class="count">按成交量 + 在售量排序</span></h3>' +
+        '  <div class="hint muted" style="font-size:12px;margin:-6px 0 14px;line-height:1.7">' +
+        '    单品热度 = 卖出(50 分) + 售出耗时(30 分) + 收藏(20 分)：卖得出去最重要，' +
+        '    其次是「多快卖掉」，收藏只是参考。捡漏商品从<b>开抢时刻</b>起算耗时。' +
+        '  </div>' +
+        '  <div id="hot-board"><div class="loading">加载中…</div></div>' +
         '</div>';
 
     const rf = document.getElementById('dash-refresh');
     if (rf) rf.onclick = () => { loadTodo().then(renderLayout); };
+
+    loadHotBoard();
+}
+
+/** 热门品类榜（两级：分类 → 该类 Top 商品） */
+async function loadHotBoard() {
+    const box = document.getElementById('hot-board');
+    if (!box) return;
+    let data;
+    try {
+        data = await api('GET', '/admin/report/hotCategories?topCategories=5&topProducts=3', null, { quiet: true });
+    } catch (e) {
+        box.innerHTML = '<div class="empty"><div class="art">' + icon('chart') + '</div>' +
+            '<b>这个榜还没接通</b><div>后端接口 <span class="mono">/admin/report/hotCategories</span> 正在开发</div></div>';
+        return;
+    }
+    if (!data || !data.length) {
+        box.innerHTML = emptyBox('暂无数据', '还没有可统计的商品');
+        return;
+    }
+
+    box.innerHTML = data.map((c, i) => {
+        const rank = '<span class="rank-badge rank-' + (i + 1) + '">' + (i + 1) + '</span>';
+        const prods = (c.products || []).map(p => {
+            const soldTag = p.sold === 1
+                ? badge('已售出 · ' + (p.elapsedDays === null ? '-' : p.elapsedDays + ' 天'), 'green')
+                : badge('在售 · 挂了 ' + (p.elapsedDays === null ? '-' : p.elapsedDays + ' 天'), 'orange');
+            return '<div class="hot-row">' +
+                '<div class="hot-name">' + esc(p.title || '') + '</div>' +
+                '<div class="hot-tags">' + soldTag +
+                '<span class="muted" style="font-size:11.5px">浏览 ' + (p.viewCount || 0) +
+                ' · 收藏 ' + (p.favoriteCount || 0) + '</span></div>' +
+                '<div class="hot-score" title="热度分">' + Math.round(p.hotScore || 0) + '</div>' +
+                '</div>';
+        }).join('') || '<div class="muted" style="font-size:12.5px;padding:6px 0">这个分类下暂时没有可统计的商品</div>';
+
+        return '<div class="hot-cat">' +
+            '<div class="hot-cat-head">' + rank +
+            '  <b>' + esc(c.categoryName || ('分类' + c.categoryId)) + '</b>' +
+            '  <span class="muted" style="font-size:12px">成交 ' + (c.soldCount || 0) + ' 件 · 在售 ' + (c.onSaleCount || 0) + ' 件</span>' +
+            '  <span class="hot-cat-score">热度 ' + Math.round(c.categoryScore || 0) + '</span>' +
+            '</div>' + prods + '</div>';
+    }).join('');
 }
 
 /* ======================= 2. 用户管理 ======================= */

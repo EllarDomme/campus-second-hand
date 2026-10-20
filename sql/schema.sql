@@ -105,6 +105,8 @@ CREATE TABLE `product` (
   `audit_note` varchar(255) DEFAULT NULL COMMENT '审核意见/驳回原因',
   `audit_time` datetime DEFAULT NULL COMMENT '审核时间',
   `status` tinyint NOT NULL DEFAULT 0 COMMENT '售卖状态：0在售 1交易中 2已售罄 3已下架',
+  `online_time` datetime DEFAULT NULL COMMENT '本次上架时间（发布/重新上架时刷新，用于算「挂了多久」）',
+  `offline_reason` tinyint DEFAULT NULL COMMENT '下架原因：1卖家手动 2超时自动下架',
   `view_count` int NOT NULL DEFAULT 0 COMMENT '浏览次数（每次进详情页 +1，用于展示商品热度）',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

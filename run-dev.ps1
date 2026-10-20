@@ -18,7 +18,7 @@ $env:MAVEN_HOME = 'D:\java_web_develop\apache-maven-3.9.4-bin\apache-maven-3.9.4
 $cpFile = Join-Path $base '.dsh-cp-server.txt'
 
 if ($Rebuild) {
-    & mvn -B -o -f (Join-Path $base 'pom.xml') clean compile -DskipTests
+    & mvn -B -o -f (Join-Path $base 'pom.xml') -pl campus-server -am -DskipTests clean package
     if ($LASTEXITCODE -ne 0) { throw "编译失败" }
 }
 
@@ -66,14 +66,27 @@ if (-not (Test-Path -LiteralPath $cpFile)) {
         "-Dmdep.outputFile=$cpFile" '-DincludeScope=runtime'
 }
 
-$deps = (Get-Content -LiteralPath $cpFile -Raw).Trim()
-$modules = @('campus-common', 'campus-pojo', 'campus-server') |
-    ForEach-Object { Join-Path $base "$_\target\classes" } |
-    Where-Object { Test-Path -LiteralPath $_ }
-$classpath = (($modules + $deps) -join ';')
+# 用 fat jar 启动（classpath 方案在模块改名后不可用了：
+# 依赖解析拿不到 campus-common/campus-pojo，因为本地仓库是只读的、没法 install）
+$jar = Join-Path $base 'campus-server\target\campus-server-1.0-SNAPSHOT.jar'
+# 源码比 jar 新 → 必须重新打包，否则跑的是旧代码（这个坑踩过很多次）
+$needBuild = -not (Test-Path -LiteralPath $jar)
+if (-not $needBuild) {
+    $newestSrc = Get-ChildItem (Join-Path $base 'campus-common\src'), (Join-Path $base 'campus-pojo\src'), (Join-Path $base 'campus-server\src') -Recurse -File -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($newestSrc -and $newestSrc.LastWriteTime -gt (Get-Item -LiteralPath $jar).LastWriteTime) {
+        Write-Host "源码比 jar 新（$($newestSrc.Name)），重新打包..." -ForegroundColor Yellow
+        $needBuild = $true
+    }
+}
+if ($needBuild) {
+    Write-Host 'jar 不存在，先打包...' -ForegroundColor Yellow
+    & mvn -B -o -f (Join-Path $base 'pom.xml') -pl campus-server -am -DskipTests package
+    if ($LASTEXITCODE -ne 0) { throw '打包失败' }
+}
 
 Write-Host "启动 campus-server（JDK: $env:JAVA_HOME）..."
 # 用参数数组传递，避免 PowerShell 把 -Dkey=value 拆成两个参数
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
-$javaArgs = @('-Dfile.encoding=UTF-8', '-cp', $classpath, 'com.campus.CampusApplication')
+$javaArgs = @('-Dfile.encoding=UTF-8', '-jar', $jar)
 & "$env:JAVA_HOME\bin\java.exe" @javaArgs

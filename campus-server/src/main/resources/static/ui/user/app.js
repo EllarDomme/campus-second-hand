@@ -1112,6 +1112,12 @@ async function viewMine() {
     }
     box.innerHTML = rows.map(p => {
         const img = firstImg(p.images);
+        // 自动下架的商品要给用户一句人话，否则他不知道为什么不见了
+        const offlineHint = (p.status === 3 && p.offlineReason === 2)
+            ? '<div class="offline-hint">挂了 ' +
+              (p.daysOnline === null || p.daysOnline === undefined ? '较长时间' : p.daysOnline + ' 天') +
+              ' 还没卖出去，系统已自动下架。<br>想继续卖请点「重新上架」（会重新计时 30 天）。</div>'
+            : '';
         return '<div class="row">' +
             '<div class="r-head"><span class="no">' + (p.auditStatus === 0 ? '待审核' : p.auditStatus === 2 ? '已驳回' : '已通过') + '</span>' +
             tag('productStatus', p.status) + '</div>' +
@@ -1120,6 +1126,7 @@ async function viewMine() {
             '  <div class="t"><b>' + esc(p.title || '') + '</b>' +
             '    <small>¥' + Number(p.price || 0).toFixed(2) + (p.auditNote ? ' · 驳回原因：' + esc(p.auditNote) : '') + '</small>' +
             '  </div></div>' +
+            offlineHint +
             '<div class="r-actions">' +
             '<button class="btn sm" data-act="edit" data-id="' + p.id + '">编辑</button>' +
             (p.status === 0
