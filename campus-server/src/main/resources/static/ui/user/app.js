@@ -190,9 +190,17 @@ async function viewHome() {
         '      <a href="#/bargain">' + icon('money') + ' 我的议价</a>' +
         '    </div>' +
         '  </div>' +
+        // 热门榜：买家看"大家都在买"，卖家看"最近什么好卖"
+        '  <div id="hot-home" style="display:none"></div>' +
+        '  <div class="sec-head">' +
+        '    <span class="sec-title">' + icon('box', 15) + ' 按分类逛</span>' +
+        '    <span class="sec-hint">点一下只看这个分类</span>' +
+        '  </div>' +
         '  <div class="chips" id="cats"><span class="chip on" data-cat="">全部</span></div>' +
         '  <div id="goods"><div class="loading">加载中…</div></div>' +
         '</div>' + tabbar('home');
+
+    loadHotHome();
 
     // 分类
     try {
@@ -373,6 +381,47 @@ function flashBanner(p) {
     return '<div class="flash-banner wait">' + icon('clock', 16) +
         '<div><b>距开抢还有 ' + untilText(p.flashStartTime) + '</b>' +
         '<span>开抢时间：' + timeStr + '</span></div></div>';
+}
+
+/** 首页热门榜（买家看"大家都在买"，卖家看"最近什么好卖"） */
+async function loadHotHome() {
+    const box = document.getElementById('hot-home');
+    if (!box) return;
+    let data;
+    try {
+        data = await uapi('GET', '/user/hot/categories?topCategories=3&topProducts=2', null, { quiet: true });
+    } catch (e) { return; }              // 接口没接通就整块不显示，不干扰首页
+    if (!data || !data.length) return;
+
+    box.style.display = '';
+    box.innerHTML =
+        '<div class="hot-home">' +
+        '  <div class="hot-home-head">' +
+        '    <span class="hot-home-title">🔥 大家都在买</span>' +
+        '    <span class="hot-home-sub">最近哪些品类卖得最快</span>' +
+        '  </div>' +
+        data.map((c, i) => {
+            const prods = (c.products || []).map(p => {
+                const tag = p.sold === 1
+                    ? '<span class="hh-sold">已卖出' + (p.elapsedDays === null ? '' : ' · ' + p.elapsedDays + ' 天') + '</span>'
+                    : '<span class="hh-on">在售</span>';
+                return '<div class="hh-item" data-hp="' + p.productId + '">' +
+                    '<span class="hh-name">' + esc(p.title || '') + '</span>' + tag +
+                    '</div>';
+            }).join('');
+            return '<div class="hot-home-cat">' +
+                '<div class="hh-cat-head">' +
+                '<span class="hh-rank">' + (i + 1) + '</span>' +
+                '<b>' + esc(c.categoryName || '') + '</b>' +
+                '<span class="hh-count">成交 ' + (c.soldCount || 0) + ' 件</span>' +
+                '</div>' + prods + '</div>';
+        }).join('') +
+        '  <div class="hot-home-foot">卖家可参考：卖得好的品类，说明需求旺</div>' +
+        '</div>';
+
+    box.querySelectorAll('[data-hp]').forEach(el => el.onclick = () => {
+        location.hash = '#/detail/' + el.getAttribute('data-hp');
+    });
 }
 
 /* ======================= 商品详情 ======================= */

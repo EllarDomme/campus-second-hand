@@ -531,3 +531,50 @@ body.h5 {
     color: #b45309;
     line-height: 1.65;
 }
+/* ---------- 区块小标题（给分类 chips 一个说明，否则用户不知道能点）---------- */
+.sec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 4px 2px 8px;
+}
+.sec-title { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 650; }
+.sec-title svg { width: 15px; height: 15px; color: var(--ink-3); }
+.sec-hint { font-size: 11.5px; color: var(--ink-3); }
+
+/* ---------- 首页热门榜 ---------- */
+.hot-home {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 13px 14px 11px;
+    margin-bottom: 13px;
+    box-shadow: var(--sh-1);
+}
+.hot-home-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 11px; }
+.hot-home-title { font-size: 15px; font-weight: 700; }
+.hot-home-sub { font-size: 11.5px; color: var(--ink-3); }
+.hot-home-cat { border-top: 1px dashed var(--line); padding-top: 9px; margin-top: 9px; }
+.hot-home-cat:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+.hh-cat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hh-cat-head b { font-size: 13.5px; }
+.hh-rank {
+    width: 18px; height: 18px; border-radius: 5px; flex: none;
+    background: var(--brand-soft); color: var(--brand);
+    font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.hh-count { margin-left: auto; font-size: 11.5px; color: var(--ink-3); }
+.hh-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0 6px 26px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.hh-item:hover { background: #fafbff; }
+.hh-name {
+    flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink-1);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hh-sold { font-size: 10.5px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--ok-soft); color: #059669; flex: none; }
+.hh-on { font-size: 10.5px; padding: 1px 6px; border-radius: var(--r-pill); background: var(--warn-soft); color: #b45309; flex: none; }
+.hot-home-foot { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--ink-3); }
