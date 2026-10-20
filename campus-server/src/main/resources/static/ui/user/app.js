@@ -801,6 +801,32 @@ async function viewMe() {
         '  <a href="#" id="credit-log">信用分流水 <span class="chev">›</span></a>' +
         '</div>' +
 
+        // 跑腿员资格说明：现在开通权限是管理端的事，C 端要告诉用户"怎么才能接单"
+        '<div class="rule-card" style="margin-bottom:12px">' +
+        '  <div class="rule-head">' + icon('truck', 15) + ' 跑腿员资格</div>' +
+        (Number((me.role !== undefined ? me.role : info.role)) === 1
+            ? '<div class="rule-foot" style="border-top:none;padding-top:0;margin-top:0;color:#059669">' +
+              '✅ 你已经是跑腿员，可以在「跑腿大厅」抢单，跑腿费计入个人收入。</div>'
+            : '<div class="rule-foot" style="border-top:none;padding-top:0;margin-top:0">' +
+              '你还不是跑腿员。想接单赚跑腿费，请联系平台管理员开通资格' +
+              '（管理员在后台「用户管理」里点「设为跑腿员」即可）。<br>' +
+              '开通后会立刻生效，无需重新登录。</div>') +
+        '</div>' +
+
+        // 联系我们：用户遇到纠纷、想申请跑腿员、或要反馈问题时需要一个出口
+        '<div class="rule-card" style="margin-bottom:12px">' +
+        '  <div class="rule-head">' + icon('message', 15) + ' 联系我们</div>' +
+        '  <div class="rule-body" style="border-top:none">' +
+        '    <div class="rule-row"><span>平台邮箱</span><b style="font-weight:500">campus-secondhand@example.edu</b></div>' +
+        '    <div class="rule-row"><span>客服 QQ 群</span><b style="font-weight:500">123 456 789</b></div>' +
+        '    <div class="rule-row"><span>处理时效</span><b style="font-weight:500;color:#059669">工作日 24 小时内</b></div>' +
+        '  </div>' +
+        '  <div class="rule-foot">' +
+        '    遇到交易纠纷请先在订单里发起「投诉」，会在管理端生成工单，处理更快；<br>' +
+        '    账号被封禁、想开通跑腿员资格，也可以通过上面的方式联系我们。' +
+        '  </div>' +
+        '</div>' +
+
         '<div class="menu-list">' +
         '  <div class="item" id="logout" style="color:#e5484d">退出登录</div>' +
         '</div>' +
@@ -1009,8 +1035,17 @@ async function viewRunner() {
         '  <div id="runner-list"><div class="loading">加载中…</div></div>' +
         '</div>';
 
-    document.getElementById('tab-avail').onclick = () => { loadRunner('avail'); };
-    document.getElementById('tab-mine').onclick = () => { loadRunner('mine'); };
+    // ⚠️ 原来这两个 tab 的点击只切数据、不切高亮 ——
+    //    所以点"我的跑腿"后，选中的颜色还留在"可抢的单"上。
+    //    正确做法：切换时同时改 class（把 on 从旧的挪到新的）。
+    const setRunnerTab = (which) => {
+        const a = document.getElementById('tab-avail');
+        const b = document.getElementById('tab-mine');
+        if (a) a.className = 'chip' + (which === 'avail' ? ' on' : '');
+        if (b) b.className = 'chip' + (which === 'mine' ? ' on' : '');
+    };
+    document.getElementById('tab-avail').onclick = () => { setRunnerTab('avail'); loadRunner('avail'); };
+    document.getElementById('tab-mine').onclick = () => { setRunnerTab('mine'); loadRunner('mine'); };
     await loadRunner('avail');
 }
 
