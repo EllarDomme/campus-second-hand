@@ -120,4 +120,10 @@ public class UserServiceImpl implements UserService {
 
         return openid;
     }
+
+    @Override
+    public User getById(Long id) {
+        return userMapper.getById(id);
+    }
+
 }

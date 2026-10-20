@@ -53,3 +53,18 @@ Write-Host "  http://localhost:8080/ui/index.html" -ForegroundColor Green
 Write-Host ""
 Write-Host "  管理后台: zhangsan / 123456" -ForegroundColor Gray
 Write-Host "  用户端  : 点页面上的快捷登录（林小满 / 陈知行 / 韩风）" -ForegroundColor Gray
+# 清掉商品列表缓存（演示数据变了但缓存还是旧的，页面会显示老图片/老价格）
+try {
+    $redisCfg = (Get-Content -LiteralPath $yml -Raw) -split 'redis:' | Select-Object -Last 1
+    $rPass = if ($redisCfg -match 'password:\s*(\S+)') { $Matches[1] } else { '' }
+    $cli = New-Object System.Net.Sockets.TcpClient('127.0.0.1', 6379)
+    $st = $cli.GetStream()
+    $wr = New-Object System.IO.StreamWriter($st); $wr.NewLine = "`r`n"; $wr.AutoFlush = $true
+    if ($rPass) { $wr.Write("*2`r`n`$4`r`nAUTH`r`n`$$($rPass.Length)`r`n$rPass`r`n") }
+    $wr.Write("*2`r`n`$6`r`nSELECT`r`n`$1`r`n1`r`n")
+    $delKeys = @('product_list_null') + (1..20 | ForEach-Object { "product_list$_" })
+    $wr.Write("*" + ($delKeys.Count + 1) + "`r`n`$3`r`nDEL`r`n" + (($delKeys | ForEach-Object { "`$" + $_.Length + "`r`n$_`r`n" }) -join ''))
+    Start-Sleep -Milliseconds 300
+    $cli.Close()
+    Write-Host "  ✅ 已清商品列表缓存（product_list_null）" -ForegroundColor Green
+} catch { Write-Host "  ⚠️ 清缓存失败（不影响数据）：$($_.Exception.Message)" -ForegroundColor Yellow }

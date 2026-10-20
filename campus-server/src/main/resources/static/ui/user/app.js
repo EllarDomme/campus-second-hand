@@ -762,8 +762,18 @@ async function viewChat(cid) {
 
 /* ======================= 我的 ======================= */
 async function viewMe() {
-    const info = U.info();
     app.innerHTML = topBar('我的') + '<div class="h5-body"><div id="me-box"><div class="loading">加载中…</div></div></div>' + tabbar('me');
+
+    // 资料用单独接口取（登录时存的 localStorage 可能是旧的，甚至没有 avatar 字段）
+    let me = {};
+    try { me = await uapi('GET', '/user/user/info', null, { quiet: true }) || {}; } catch (e) { }
+    if (me && me.id) {
+        const cur = U.info();
+        U.set(U.token(), Object.assign({}, cur, {
+            id: me.id, nickname: me.nickname, avatar: me.avatar, role: me.role
+        }));
+    }
+    const info = Object.assign({}, U.info(), me);   // 合并兜底
 
     let credit = {};
     try { credit = await uapi('GET', '/user/credit/my', null, { quiet: true }) || {}; } catch (e) { }
@@ -794,9 +804,22 @@ async function viewMe() {
         '<div class="menu-list">' +
         '  <div class="item" id="logout" style="color:#e5484d">退出登录</div>' +
         '</div>' +
-        '<div class="h5-empty" style="padding:22px 0;font-size:12px">' +
-        '  信用分规则：成交 +2 · 好评 +1 · 差评 -2 · 超时爽约 -5 · 投诉成立 -10<br>' +
-        '  每日加分上限 10 分（补偿性加分不受限）' +
+        '<div class="rule-card">' +
+        '  <div class="rule-head">' + icon('star', 15) + ' 信用分规则</div>' +
+        '  <div class="rule-body">' +
+        '    <div class="rule-row"><span>交易完成</span><b class="up">+2</b></div>' +
+        '    <div class="rule-row"><span>收到好评（4~5 星）</span><b class="up">+1</b></div>' +
+        '    <div class="rule-row"><span>收到中评（3 星）</span><b class="flat">0</b></div>' +
+        '    <div class="rule-row"><span>收到差评（1~2 星）</span><b class="down">-2</b></div>' +
+        '    <div class="rule-row"><span>超时未确认（爽约）</span><b class="down">-5</b></div>' +
+        '    <div class="rule-row"><span>被投诉且成立</span><b class="down">-10</b></div>' +
+        '  </div>' +
+        '  <div class="rule-foot">' +
+        '    · 每日加分上限 <b>10</b> 分（只限加分，扣分不设限）<br>' +
+        '    · 分数下限 <b>0</b> 分，扣到底也不会变负<br>' +
+        '    · 管理员手动调整单次不超过 <b>±20</b> 分，且必须填写理由<br>' +
+        '    · 撤销处罚（如删除违规差评）的补偿性加分不受每日上限限制' +
+        '  </div>' +
         '</div>';
 
     document.getElementById('logout').onclick = () => {

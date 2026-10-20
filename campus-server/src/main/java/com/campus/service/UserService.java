@@ -12,4 +12,7 @@ public interface UserService {
      * @return 用户
      */
     User loginByOpenid(String openid);
+
+    /** 按 id 查用户（前端要取自己的头像/昵称用） */
+    User getById(Long id);
 }

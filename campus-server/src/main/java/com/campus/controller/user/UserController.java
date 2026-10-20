@@ -4,6 +4,7 @@ import com.campus.constant.JwtClaimsConstant;
 import com.campus.dto.UserLoginDTO;
 import com.campus.entity.User;
 import com.campus.properties.JwtProperties;
+import com.campus.context.BaseContext;
 import com.campus.result.Result;
 import com.campus.service.UserService;
 import com.campus.utils.JwtUtil;
@@ -67,6 +68,28 @@ public class UserController {
         return Result.success(userLoginVO);
     }
 
+    /**
+     * 取当前登录用户的资料（昵称、头像、角色）
+     *
+     * 为什么需要这个接口：登录响应里虽然有头像，但它被存在前端 localStorage 里，
+     * 一旦换过头像/改过昵称，前端还是旧的；而且老用户登录过之后也没有 avatar 字段。
+     * 页面上需要"打开就取一次最新资料"，所以单独给一个轻量接口。
+     */
+    @GetMapping("/info")
+    @ApiOperation("取当前登录用户资料")
+    public Result<UserLoginVO> info() {
+        User user = userService.getById(BaseContext.getCurrentId());
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        return Result.success(UserLoginVO.builder()
+                .id(user.getId())
+                .openid(user.getOpenid())
+                .nickname(user.getNickname())
+                .avatar(user.getAvatar())
+                .role(user.getRole())
+                .build());
+    }
     /**
      * 测试登录：用指定openid签发C端JWT（不需要微信，供本地开发和前端联调）
      * 不同 openid 会查/建不同的用户，从而实现"多用户身份隔离"
