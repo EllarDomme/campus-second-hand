@@ -7,6 +7,28 @@
   <img src="docs/er-diagram.png" alt="数据库设计" width="720">
 </p>
 
+## 界面预览
+
+### 用户端（H5）
+
+<table>
+  <tr>
+    <td align="center"><b>首页 · 大家都在买</b><br><img src="docs/screenshots/01-home.jpg" width="260"></td>
+    <td align="center"><b>商品列表</b><br><img src="docs/screenshots/02-products.jpg" width="260"></td>
+    <td align="center"><b>商品详情</b><br><img src="docs/screenshots/03-detail.jpg" width="260"></td>
+  </tr>
+</table>
+
+### 管理端 · 数据看板
+
+<p align="center">
+  <img src="docs/screenshots/04-dashboard.jpg" width="880">
+</p>
+
+> 看板底部是「热门品类榜」：分类按 `成交量 × 10 + 在售量` 排序，
+> 分类内单品按 `卖出 50 + 售出耗时 30 + 收藏 20` 的热度分排序。
+> 注意「【捡漏】」商品的耗时从**开抢时刻**起算，所以挂着 0 天。
+
 ## 目录
 
 - [功能概览](#功能概览)
