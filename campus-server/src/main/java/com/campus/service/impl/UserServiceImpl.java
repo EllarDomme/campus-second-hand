@@ -26,6 +26,8 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+import static sun.swing.MenuItemLayoutHelper.max;
+
 @Service
 @Slf4j
 public class UserServiceImpl implements UserService {
@@ -149,33 +151,68 @@ public class UserServiceImpl implements UserService {
         // 【1】参数与存在性
         //   · userId 为 null → throw new BaseException("用户不存在")
         //   · userMapper.getById(userId) 为 null → 同上
-        //
+        if(userId == null){
+            throw new BaseException("用户不存在");
+        }
+        User user = userMapper.getById(userId);
+        if(user == null){
+            throw new BaseException("用户不存在");
+        }
         // 【2】评价统计（ReviewMapper 已经有现成方法，直接用）
         //   · 好评数：reviewMapper.countByStarAtLeast(userId, 4)   // ≥4 星算好评
         //   · 差评数：reviewMapper.countByStarAtMost(userId, 2)    // ≤2 星算差评
         //   （3 星算中评，既不是好评也不是差评 —— 所以上一步算好评时会自动排除）
-        //
+        Integer goodReview = reviewMapper.countByStarAtLeast(userId,4);
+        Integer badReview = reviewMapper.countByStarAtMost(userId,2);
         // 【3】商品统计（ProductMapper.countByMap 接收一个 Map，里面放筛选条件）
         //   · 在售：  new HashMap<>() 里 put("status", 0) → productMapper.countByMap(map)
         //   · 已售出：put("status", 2)
         //   · ⚠️ countByMap 返回的是 Integer，可能是 null，要兜底成 0
-        //
+        HashMap<String,Object> onSaleMap = new HashMap<>();
+        onSaleMap.put("status",0);
+        onSaleMap.put("sellerId",userId);
+        Integer onSaleGood = productMapper.countByMap(onSaleMap);
+        HashMap<String,Object> saleOutMap = new HashMap<>();
+        saleOutMap.put("status",2);
+        saleOutMap.put("sellerId",userId);
+        Integer saleOutGood = productMapper.countByMap(saleOutMap);
+        if(onSaleGood == null){
+            onSaleGood = 0;
+        }
+        if(saleOutGood == null){
+            saleOutGood = 0;
+        }
         // 【4】加入天数
         //   · user.getCreateTime() 是 LocalDateTime
         //   · int days = (int) ChronoUnit.DAYS.between(user.getCreateTime().toLocalDate(), LocalDate.now())
         //   · 兜底：createTime 为 null → 0；算出来是负数（时钟问题）→ 也当 0
-        //
+        int days = 0;
+        if(user.getCreateTime() != null) {
+            days = ((int) ChronoUnit.DAYS.between(user.getCreateTime().toLocalDate(), LocalDateTime.now()));
+        }
+        days = Math.max(days,0);
         // 【5】组装 UserProfileVO（用 builder）
         //   ⚠️⚠️ 只放这几个字段：userId / nickname / avatar / role /
         //        creditScore / goodReviewCount / badReviewCount /
         //        onSaleCount / soldCount / joinedDays
         //   ⚠️⚠️ 绝对不要放 openid / realName / studentNo / studentCardImg / phone
         //        —— 这个对象是给"任何登录用户"看的，泄露别人的学号和手机号是事故。
-        //
+        return UserProfileVO.builder()
+                .userId(userId)
+                .nickname(user.getNickname())
+                .avatar(user.getAvatar())
+                .role(user.getRole())
+                .creditScore(user.getCreditScore())
+                .goodReviewCount(goodReview)
+                .badReviewCount(badReview)
+                .onSaleCount(onSaleGood)
+                .soldCount(saleOutGood)
+                .joinedDays(days)
+                .build();
+
         // 【自测】
         //   用户 1000（林小满）：应该有在售商品、有 1 条好评、信用分 128
         //   用户 999999（不存在）：应该抛"用户不存在"
         // =======================================================
-        throw new UnsupportedOperationException("S6-3 待实现：getProfile 的填空 1~5");
     }
 }

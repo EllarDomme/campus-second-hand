@@ -103,6 +103,9 @@
             <if test="auditStatus != null">
                 and audit_status = #{auditStatus}
             </if>
+            <if test="sellerId != null">
+                and seller_id = #{sellerId}
+            </if>
         </where>
     </select>
 
