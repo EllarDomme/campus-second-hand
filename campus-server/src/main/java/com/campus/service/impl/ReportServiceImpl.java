@@ -114,13 +114,16 @@ public class ReportServiceImpl implements ReportService {
         return cats;
     }
 
-    /**
+/**
      * 单品热度分（0 ~ 100）
      *
-     * 设计意图：卖出最重要（50 分，占一半），其次是"多快卖掉"（30 分），收藏只是参考（20 分）。
+     * 为什么是 static + public：
+     *   · static —— 它是纯函数，不依赖任何实例状态，测试可以直接调用
+     *   · public —— 让 HotScoreTest 能测它（放在同包也行，但 public 更省事）
+     * 设计意图：卖出最重要（50 分），其次是"多快卖掉"（30 分），收藏只是参考（20 分）。
      * 这样算出来，卖过的商品最低 50 分，没卖过的最高不到 50 分 —— 自然形成两个梯队。
      */
-    private double calcHotScore(Integer sold, Integer elapsedDays, Integer favoriteCount) {
+    public static double calcHotScore(Integer sold, Integer elapsedDays, Integer favoriteCount) {
         // ================= 你的部分：填空 A1 ~ A3 =================
         //
         // 【A1】卖出分：sold == 1 → 50 分，否则 0 分
