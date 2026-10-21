@@ -104,84 +104,24 @@
         <!-- ↑↑↑ 你的 SQL 写到这上面 ↑↑↑ -->
     </select>
 
-    <!--
-        =====================================================================
-        【你的任务 A-1】分类聚合：每个分类卖了几件、还剩几件在卖
-        =====================================================================
+        <!--
+        【你的任务 A-1】分类聚合：每个分类卖了几件、还有几件在卖
 
-        ⭐ 先看同一个文件里已经写好的 productSummary（在它上面），
-           它用的就是 sum(case when 条件 then 1 else 0 end) ——
-           这个写法你要照抄，只是这次的"分组维度"从"整体"变成"每个分类"。
+        验收（必须正好是这 8 行，按此顺序）：
+            1 教材书籍  sold=2  onSale=8
+            2 数码产品  sold=1  onSale=6
+            6 服饰鞋包  sold=1  onSale=2
+            3 生活用品  sold=0  onSale=4
+            4 运动器材  sold=0  onSale=3
+            8 其他      sold=0  onSale=3
+            5 交通工具  sold=0  onSale=2
+            7 乐器      sold=0  onSale=2
 
-        ============================================================
-        目标结果长这样（8 行）：
-            categoryId | categoryName | soldCount | onSaleCount
-                1      | 教材书籍      |     2     |     8
-                2      | 数码产品      |     1     |     6
-                ...
-        ============================================================
-        ⭐ 骨架（复制出去，把 3 个 ？？？ 换成真的）：
-
-        select c.id            as categoryId,
-               c.category_name as categoryName,
-               ① ？？？          as soldCount,
-               ② ？？？          as onSaleCount
-        from category c
-        left join product p
-               on ③ ？？？                        ＃ 关联条件 + 过滤条件
-        where ④ ？？？                             ＃ 商品的有效性过滤
-        group by c.id, c.category_name
-        order by soldCount desc, onSaleCount desc, c.id asc
-        limit #{topCategories}
-
-
-        ============================================================
-        逐句怎么填
-        ============================================================
-        ① soldCount = "该分类下卖掉了多少件"
-           卖掉 = status = 2（已售罄）
-           计数写法：sum(case when p.status = 2 then 1 else 0 end)
-           ⚠️ 用 sum(...) 不是 count(...)：count 会把"不满足的行"也算进去
-
-        ② onSaleCount = "该分类下还有多少件在卖"
-           在卖 = status = 0
-           写法同上，只是条件换成 p.status = 0
-           ⚠️ 这里不能写 count(*)，因为一行商品只会属于一种状态
-
-        ③ 关联条件 = "product 的哪个字段指向 category 的 id" + "哪些商品算数"
-           两个条件用 and 连起来：
-               p.category_id = c.id
-               and p.audit_status = 1            ＃ 审核通过（未被驳回）
-               and p.status in (0, 1, 2)         ＃ 在售 / 交易中 / 已售罄（排除 3 已下架）
-           ⚠️ 为什么把过滤写进 on 而不是 where：
-              用 left join 时，写在 where 里会把"没有商品的分类"过滤掉（变成 inner join）；
-              写在 on 里才能保留空分类（0 件）。本项目 8 个分类都有商品，两种写法结果一样，
-              但"on 里过滤"是更稳的习惯。
-
-        ④ 如果你把过滤写在 on 里，这里就不需要 where 了；
-           也可以写成 where p.id is not null（但没必要）。
-
-        ============================================================
-        ⭐ 自测小技巧：先跑一个"最小版本"，再加复杂度
-        ============================================================
-        第 1 步：先确认能按分类分组
-            select category_id, count(*) from product
-            where audit_status = 1 and status in (0,1,2)
-            group by category_id;
-            → 应该看到 8 行，每行有数量
-
-        第 2 步：确认 case when 计数对不对
-            select category_id,
-                   sum(case when status = 2 then 1 else 0 end) as sold,
-                   sum(case when status = 0 then 1 else 0 end) as on_sale
-            from product where audit_status = 1 and status in (0,1,2)
-            group by category_id;
-            → 分类 1 应该是 sold=2, on_sale=8
-
-        第 3 步：把 category 表 left join 进来，补上 category_name
-
-        第 4 步：最后加 order by / limit，替换掉占位 SQL
-        =====================================================================
+        提示：同文件上面的 productSummary 已经用了 sum(case when ... then 1 else 0 end)，
+              照着那个形状写，只是把"整体"换成"按 category 分组"。
+        过滤：audit_status = 1 且 status in (0,1,2)
+        排序：soldCount desc, onSaleCount desc, c.id asc
+        限量：limit #{topCategories}
     -->
         <select id="listCategoryStat" resultType="com.campus.vo.HotCategoryVO">
         select c.id            as categoryId,
@@ -313,25 +253,12 @@
                p.status,
                p.view_count   as viewCount,
 
-               <!-- 收藏数：用子查询，避免 join 造成行数翻倍 -->
                (select count(*) from favorite f where f.product_id = p.id) as favoriteCount,
-
-               <!-- 是否已成交：status = 2 表示已售罄（卖出去了） -->
                case when p.status = 2 then 1 else 0 end as sold,
 
-               <!--
-                   挂了多久 / 多快卖掉
-                   DATEDIFF(结束时刻, 起算时刻)
-                   结束时刻：已成交 → 该商品那笔已完成订单的 finish_time
-                            未成交 → NOW()
-                   起算时刻：捡漏商品 → flash_start_time（开抢时刻，不是发布时刻）
-                            普通商品 → online_time
-                   兜底：online_time 可空，空了就用 create_time
-               -->
+               <!-- elapsedDays = DATEDIFF(结束时刻, 起算时刻) -->
+
                datediff(
-                   <!-- 结束时刻。多包一层 coalesce：status=2 但没有已完成订单的商品，
-                        子查询会返回 NULL，DATEDIFF 结果就会变 NULL（打分变 0），
-                        这里退化成 NOW() 更合理 -->
                    coalesce(
                        case when p.status = 2
                             then (select max(o.finish_time) from trade_order o
