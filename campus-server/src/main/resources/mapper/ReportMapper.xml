@@ -104,26 +104,30 @@
         <!-- ↑↑↑ 你的 SQL 写到这上面 ↑↑↑ -->
     </select>
 
-        <!--
+    <!--
         【你的任务 A-1】分类聚合：每个分类卖了几件、还有几件在卖
 
         验收（必须正好是这 8 行，按此顺序）：
-            1 教材书籍  sold=2  onSale=8
-            2 数码产品  sold=1  onSale=6
-            6 服饰鞋包  sold=1  onSale=2
-            3 生活用品  sold=0  onSale=4
-            4 运动器材  sold=0  onSale=3
-            8 其他      sold=0  onSale=3
-            5 交通工具  sold=0  onSale=2
-            7 乐器      sold=0  onSale=2
-
-        select
-
+            分类id 名称       sold  onSale   分数 = sold*10 + onSale
+              1   教材书籍     2      8              28
+              2   数码产品     1      6              16
+              6   服饰鞋包     1      2              12
+              3   生活用品     0      4               4
+              4   运动器材     0      3               3
+              8   其他         0      3               3
+              5   交通工具     0      2               2
+              7   乐器         0      2               2
 
         提示：同文件上面的 productSummary 已经用了 sum(case when ... then 1 else 0 end)，
               照着那个形状写，只是把"整体"换成"按 category 分组"。
         过滤：audit_status = 1 且 status in (0,1,2)
-        排序：soldCount desc, onSaleCount desc, c.id asc
+
+        ⚠️ 排序要用【分数】而不是"先 sold 后 onSale"：
+              order by (soldCount * 10 + onSaleCount) desc, c.id asc
+           原因：order by 决定的是【哪 N 行被 limit 选中】。
+                 如果排序键和"热度分"不一致，分数高的分类可能正好被 limit 砍掉。
+                 分数相同时用 c.id 兜底，保证每次查询顺序一致。
+
         限量：limit #{topCategories}
     -->
         <select id="listCategoryStat" resultType="com.campus.vo.HotCategoryVO">
