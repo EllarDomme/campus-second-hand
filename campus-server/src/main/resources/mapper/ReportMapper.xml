@@ -312,11 +312,48 @@
                p.price,
                p.status,
                p.view_count   as viewCount,
-               0              as sold,
-               0              as favoriteCount,
-               null           as elapsedDays
+
+               <!-- 收藏数：用子查询，避免 join 造成行数翻倍 -->
+               (select count(*) from favorite f where f.product_id = p.id) as favoriteCount,
+
+               <!-- 是否已成交：status = 2 表示已售罄（卖出去了） -->
+               case when p.status = 2 then 1 else 0 end as sold,
+
+               <!--
+                   挂了多久 / 多快卖掉
+                   DATEDIFF(结束时刻, 起算时刻)
+                   结束时刻：已成交 → 该商品那笔已完成订单的 finish_time
+                            未成交 → NOW()
+                   起算时刻：捡漏商品 → flash_start_time（开抢时刻，不是发布时刻）
+                            普通商品 → online_time
+                   兜底：online_time 可空，空了就用 create_time
+               -->
+               datediff(
+                   <!-- 结束时刻。多包一层 coalesce：status=2 但没有已完成订单的商品，
+                        子查询会返回 NULL，DATEDIFF 结果就会变 NULL（打分变 0），
+                        这里退化成 NOW() 更合理 -->
+                   coalesce(
+                       case when p.status = 2
+                            then (select max(o.finish_time) from trade_order o
+                                   where o.product_id = p.id and o.status = 2)
+                            else now()
+                       end,
+                       now()),
+                   coalesce(
+                       case when p.is_flash_sale = 1 and p.flash_start_time is not null
+                            then p.flash_start_time
+                            else p.online_time
+                       end,
+                       p.create_time)
+               ) as elapsedDays
+
         from product p
-        where 1 = 0
+        where p.audit_status = 1
+          and p.status in (0, 1, 2)
+          and p.category_id in
+              <foreach collection="categoryIds" item="cid" open="(" separator="," close=")">
+                  #{cid}
+              </foreach>
     </select>
 
 
