@@ -128,23 +128,41 @@ public class ReportServiceImpl implements ReportService {
         //
         // 【A1】卖出分：sold == 1 → 50 分，否则 0 分
         //   提示：sold 可能是 null（SQL 没查出来），要当 0 处理
-        //
+        // sold == 1 → 50 分，否则 0 分（默认值就是 0，不需要再写一个 if 去赋 0）
+        // ⚠️ 用 Integer.valueOf(1).equals(sold) 而不是 sold == 1：
+        //    后者会触发自动拆箱，sold 为 null 时直接 NPE —— 而 null 恰恰是可能出现的。
+        int soldScore = Integer.valueOf(1).equals(sold) ? 50 : 0;
+
         // 【A2】耗时分（0 ~ 100）：
-        //   · elapsedDays 可能为 null（老数据没有 online_time），当 0 处理
+        //   · elapsedDays 为 null 表示"不知道挂了多久"（老数据没有 online_time）
+        //     → 保守给 0 分，不能因为"不知道"就奖励它，否则脏数据会刷上榜
         //   · 归一化：(1 - min(elapsedDays, 90) / 90.0) * 100
         //     → 0 天 = 100 分，90 天及以上 = 0 分
         //   · ⚠️ 90 是封顶：不给它封顶的话，挂了三年的商品会把分数拉到很离谱的值；
         //         封顶后最低就是 0 分（0 分的商品自然上不了榜）
         //   · ⚠️ 用 90.0 而不是 90（整数除法会把小数丢掉）
-        //
+        double timeScore = 0;
+        if(elapsedDays == null){
+            timeScore = 0;
+        }else{
+            timeScore = (1 - Math.min(elapsedDays,90)/90.0) * 100;
+        }
+
+
         // 【A3】收藏分（0 ~ 100）：
         //   · favoriteCount 可能为 null → 当 0
         //   · 封顶 20 个：min(favoriteCount, 20) / 20.0 * 100
         //   · ⚠️ 为什么要封顶：收藏数是可刷的，不封顶的话"自己点 100 次"就能刷上榜
-        //
+        double favoriteScore;
+        if(favoriteCount == null){
+            favoriteScore = 0;
+        }else{
+        favoriteScore = (Math.min(favoriteCount,20) / 20.0) * 100;
+        }
+
         // 最后返回：卖出分 + 耗时分 × 0.3 + 收藏分 × 0.2
         //   （也就是 50×sold + 30×timeScore/100 + 20×favScore/100）
-        //
+        double score = soldScore + timeScore * 0.3 + favoriteScore * 0.2;
         // 自测四个例子（写完自己算一遍）：
         //   昨天挂、今天卖、收藏 5  → 50 + 29.7 + 5   ≈ 84.7
         //   卖了但花了 60 天         → 50 + 10   + ?   ≈ 60 出头
@@ -152,7 +170,7 @@ public class ReportServiceImpl implements ReportService {
         //   挂了 200 天没卖、收藏 0  → 0  + 0    + 0   = 0
         //
         // =======================================================
-        throw new UnsupportedOperationException("S6-2 待实现：calcHotScore 的填空 A1~A3");
+        return score;
     }
 
 }
