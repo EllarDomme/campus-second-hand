@@ -284,10 +284,10 @@ async function loadHotBoard() {
     if (!box) return;
     let data;
     try {
-        data = await api('GET', '/admin/report/hotCategories?topCategories=5&topProducts=3', null, { quiet: true });
+        data = await api('GET', '/admin/dashboard/hotCategories?topCategories=5&topProducts=3', null, { quiet: true });
     } catch (e) {
         box.innerHTML = '<div class="empty"><div class="art">' + icon('chart') + '</div>' +
-            '<b>这个榜还没接通</b><div>后端接口 <span class="mono">/admin/report/hotCategories</span> 正在开发</div></div>';
+            '<b>这个榜暂时取不到</b><div>接口 <span class="mono">GET /admin/dashboard/hotCategories</span> 返回异常，先看下服务端日志</div></div>';
         return;
     }
     if (!data || !data.length) {
