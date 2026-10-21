@@ -117,6 +117,9 @@
             5 交通工具  sold=0  onSale=2
             7 乐器      sold=0  onSale=2
 
+        select
+
+
         提示：同文件上面的 productSummary 已经用了 sum(case when ... then 1 else 0 end)，
               照着那个形状写，只是把"整体"换成"按 category 分组"。
         过滤：audit_status = 1 且 status in (0,1,2)
@@ -124,12 +127,8 @@
         限量：limit #{topCategories}
     -->
         <select id="listCategoryStat" resultType="com.campus.vo.HotCategoryVO">
-        select c.id            as categoryId,
-               c.category_name as categoryName,
-               0               as soldCount,
-               0               as onSaleCount
-        from category c
-        where 1 = 0
+        select
+
     </select>
 
 
