@@ -131,8 +131,18 @@
         限量：limit #{topCategories}
     -->
         <select id="listCategoryStat" resultType="com.campus.vo.HotCategoryVO">
-        select
-
+        select c.id            as categoryId,
+               c.category_name as categoryName,
+               ifnull(sum(case when p.status = 2 then 1 else 0 end), 0) as soldCount,
+               ifnull(sum(case when p.status = 0 then 1 else 0 end), 0) as onSaleCount
+        from category c
+        left join product p
+               on p.category_id = c.id
+              and p.audit_status = 1
+              and p.status in (0, 1, 2)
+        group by c.id, c.category_name
+        order by (soldCount * 10 + onSaleCount) desc, c.id asc
+        limit #{topCategories}
     </select>
 
 
