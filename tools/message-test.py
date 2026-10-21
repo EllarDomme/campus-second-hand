@@ -27,6 +27,7 @@ import base64
 import json
 import os
 import socket
+import time
 import struct
 import sys
 import urllib.error
@@ -187,15 +188,27 @@ check("T5", "小明发一条消息", "code=1",
       call("POST", "/user/message/send", Hm,
            {"conversationId": cid, "content": "你好，明天下午在宿舍楼下交易可以吗"}))
 
-msg = ws_try_recv(ws_seller, 6)
-push1 = json.loads(msg) if msg else {}
-check_true("T6", "学姐实时收到 type=message 推送", push1.get("type") == "message",
-           "（收到：%s）" % (msg if msg else "什么都没收到"))
+# 服务端会推两帧：type=message（聊天内容）和 type=unread（小红点）。
+# 这两帧走不同的发送路径，【到达顺序没有保证】——
+# 所以不能"第 1 帧断言 message、第 2 帧断言 unread"，否则顺序反过来就双双失败。
+# 正确做法：把 8 秒内收到的帧都收集起来，只断言"两种类型都出现过"。
+push_frames = []
+deadline = time.time() + 8
+while len(push_frames) < 2 and time.time() < deadline:
+    remaining = max(0.5, deadline - time.time())
+    frame = ws_try_recv(ws_seller, remaining)
+    if not frame:
+        break
+    try:
+        push_frames.append(json.loads(frame))
+    except Exception:
+        pass
 
-unread = ws_try_recv(ws_seller, 6)
-push2 = json.loads(unread) if unread else {}
-check_true("T7", "学姐随后收到 type=unread 推送（小红点）", push2.get("type") == "unread",
-           "（收到：%s）" % (unread if unread else "什么都没收到"))
+push_types = [p.get("type") for p in push_frames]
+seen = "（收到 %d 帧：%s）" % (len(push_frames), push_types if push_types else "什么都没收到")
+
+check_true("T6", "学姐实时收到 type=message 推送", "message" in push_types, seen)
+check_true("T7", "学姐随后收到 type=unread 推送（小红点）", "unread" in push_types, seen)
 
 # ---------- 三、历史 + 已读 + 已读回执 ----------
 print("\n===== 三、聊天记录 + 已读回执（3 项）=====")

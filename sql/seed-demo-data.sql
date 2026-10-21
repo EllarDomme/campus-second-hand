@@ -307,15 +307,9 @@ INSERT INTO flash_sale_record (id, product_id, user_id, is_success, create_time)
 
 -- ---------- 13. 图片素材（按分类套插画，用户配头像）----------
 UPDATE product SET images = JSON_ARRAY(
-  CONCAT('ui/img/cat_', CASE category_id
-    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'
-    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_a.svg'),
-  CONCAT('ui/img/cat_', CASE category_id
-    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'
-    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_b.svg'),
-  CONCAT('ui/img/cat_', CASE category_id
-    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'
-    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_c.svg'));
+  CONCAT('https://picsum.photos/seed/campus', id, 'a/800/800'),
+  CONCAT('https://picsum.photos/seed/campus', id, 'b/800/800'),
+  CONCAT('https://picsum.photos/seed/campus', id, 'c/800/800'));
 UPDATE user SET avatar = CONCAT('https://picsum.photos/seed/avatar', id, '/200/200');
 -- 隐藏回归测试夹具（回归脚本会自己改回来）
 UPDATE product SET audit_status = 2, audit_note = '测试夹具，运行时由回归脚本恢复'
