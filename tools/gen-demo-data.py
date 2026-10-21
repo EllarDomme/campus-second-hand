@@ -550,16 +550,12 @@ w(",\n".join(vals) + ";")
 w("")
 # ---------- 图片素材：按分类给插画，用户给头像 ----------
 w("-- ---------- 13. 图片素材（按分类套插画，用户配头像）----------")
+# 商品图用 picsum.photos（真实照片，每个商品 3 张不同的，可以轮播）
+# 本地还留着 ui/img/cat_*.svg 那套插画，但不用了 —— 用户要的是"能加载出来的真实图片"
 w("UPDATE product SET images = JSON_ARRAY(")
-w("  CONCAT('ui/img/cat_', CASE category_id")
-w("    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'")
-w("    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_a.svg'),")
-w("  CONCAT('ui/img/cat_', CASE category_id")
-w("    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'")
-w("    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_b.svg'),")
-w("  CONCAT('ui/img/cat_', CASE category_id")
-w("    WHEN 1 THEN 'book' WHEN 2 THEN 'digital' WHEN 3 THEN 'life' WHEN 4 THEN 'sport'")
-w("    WHEN 5 THEN 'vehicle' WHEN 6 THEN 'cloth' WHEN 7 THEN 'music' ELSE 'other' END, '_c.svg'));")
+w("  CONCAT('https://picsum.photos/seed/campus', id, 'a/800/800'),")
+w("  CONCAT('https://picsum.photos/seed/campus', id, 'b/800/800'),")
+w("  CONCAT('https://picsum.photos/seed/campus', id, 'c/800/800'));")
 w("UPDATE user SET avatar = CONCAT('https://picsum.photos/seed/avatar', id, '/200/200');")
 # 回归测试夹具（product 100~107）不要出现在演示数据里：
 # 它们由 sql/test-reset*.sql 维护，会自己改回 audit_status = 1，所以回归测试不受影响
