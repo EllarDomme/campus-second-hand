@@ -9,6 +9,7 @@ import com.campus.result.Result;
 import com.campus.service.UserService;
 import com.campus.utils.JwtUtil;
 import com.campus.vo.UserLoginVO;
+import com.campus.vo.UserProfileVO;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -124,5 +126,15 @@ public class UserController {
                 .build();
 
         return Result.success(userLoginVO);
+    }
+
+    /**
+     * 【S6-3】用户公开主页（看别人的信用分、评价、在卖什么）
+     * 用法：GET /user/user/profile/1000
+     */
+    @GetMapping("/profile/{userId}")
+    @ApiOperation("用户公开主页")
+    public Result<UserProfileVO> profile(@PathVariable Long userId) {
+        return Result.success(userService.getProfile(userId));
     }
 }

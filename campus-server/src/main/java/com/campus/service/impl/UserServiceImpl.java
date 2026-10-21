@@ -9,6 +9,11 @@ import com.campus.dto.UserLoginDTO;
 import com.campus.entity.User;
 import com.campus.exception.BaseException;
 import com.campus.exception.LoginFailedException;
+import com.campus.mapper.ReviewMapper;
+import com.campus.mapper.ProductMapper;
+import com.campus.vo.UserProfileVO;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import com.campus.mapper.UserMapper;
 import com.campus.properties.WeChatProperties;
 import com.campus.service.UserService;
@@ -27,6 +32,14 @@ public class UserServiceImpl implements UserService {
 
     //微信服务接口地址
     private static final String WX_LOGIN = "https://api.weixin.qq.com/sns/jscode2session";
+
+    /** 【S6-3】主页要用到评价统计 */
+    @Autowired
+    private ReviewMapper reviewMapper;
+
+    /** 【S6-3】主页要用到商品统计 */
+    @Autowired
+    private ProductMapper productMapper;
 
     @Autowired
     private UserMapper userMapper;
@@ -126,4 +139,43 @@ public class UserServiceImpl implements UserService {
         return userMapper.getById(id);
     }
 
+    /**
+     * 【S6-3 你的练习】用户公开主页
+     */
+    @Override
+    public UserProfileVO getProfile(Long userId) {
+        // ================= 你的部分：填空 1 ~ 5 =================
+        //
+        // 【1】参数与存在性
+        //   · userId 为 null → throw new BaseException("用户不存在")
+        //   · userMapper.getById(userId) 为 null → 同上
+        //
+        // 【2】评价统计（ReviewMapper 已经有现成方法，直接用）
+        //   · 好评数：reviewMapper.countByStarAtLeast(userId, 4)   // ≥4 星算好评
+        //   · 差评数：reviewMapper.countByStarAtMost(userId, 2)    // ≤2 星算差评
+        //   （3 星算中评，既不是好评也不是差评 —— 所以上一步算好评时会自动排除）
+        //
+        // 【3】商品统计（ProductMapper.countByMap 接收一个 Map，里面放筛选条件）
+        //   · 在售：  new HashMap<>() 里 put("status", 0) → productMapper.countByMap(map)
+        //   · 已售出：put("status", 2)
+        //   · ⚠️ countByMap 返回的是 Integer，可能是 null，要兜底成 0
+        //
+        // 【4】加入天数
+        //   · user.getCreateTime() 是 LocalDateTime
+        //   · int days = (int) ChronoUnit.DAYS.between(user.getCreateTime().toLocalDate(), LocalDate.now())
+        //   · 兜底：createTime 为 null → 0；算出来是负数（时钟问题）→ 也当 0
+        //
+        // 【5】组装 UserProfileVO（用 builder）
+        //   ⚠️⚠️ 只放这几个字段：userId / nickname / avatar / role /
+        //        creditScore / goodReviewCount / badReviewCount /
+        //        onSaleCount / soldCount / joinedDays
+        //   ⚠️⚠️ 绝对不要放 openid / realName / studentNo / studentCardImg / phone
+        //        —— 这个对象是给"任何登录用户"看的，泄露别人的学号和手机号是事故。
+        //
+        // 【自测】
+        //   用户 1000（林小满）：应该有在售商品、有 1 条好评、信用分 128
+        //   用户 999999（不存在）：应该抛"用户不存在"
+        // =======================================================
+        throw new UnsupportedOperationException("S6-3 待实现：getProfile 的填空 1~5");
+    }
 }
